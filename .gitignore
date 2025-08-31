@@ -1,0 +1,39 @@
+# IDE & OS files
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+
+# Local data storage
+storage/
+
+# Node / Vue
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env.local
+.env.*.local
+
+# Java / Maven
+target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+.settings/
+.classpath
+.project
+
