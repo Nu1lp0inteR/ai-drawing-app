@@ -4,6 +4,7 @@ package com.aidrawing.backend.repository;
 
 import com.aidrawing.backend.entity.Drawing;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -19,8 +20,9 @@ public interface DrawingRepository extends JpaRepository<Drawing, String> {
 
     /**
      * Finds all Drawing entities that have been shared to the public gallery, sorted from newest to oldest.
-     * * 查找所有已分享到公共画廊的绘图，按创建日期降序排列。
+     * 查找所有已分享到公共画廊的绘图，按创建日期降序排列。
      */
+    @Query("SELECT d FROM Drawing d WHERE d.sharedToGallery = true ORDER BY d.createdAt DESC")
     List<Drawing> findBySharedToGalleryTrueOrderByCreatedAtDesc();
 }
 

@@ -75,13 +75,30 @@ const disconnectWebSocket = () => {
   }
 }
 
+// --- 事件监听：处理从画廊跳转到创作中心的请求 ---
+const handleSwitchToStudio = (event) => {
+  activeView.value = 'Studio';
+  if (event.detail?.autoFill) {
+    // 延迟一点时间确保Studio组件已经挂载
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('loadAutoFillParams'));
+    }, 100);
+  }
+};
+
 // --- Vue 生命周期钩子 ---
 onMounted(() => {
   connectWebSocket() // 组件挂载时，建立WebSocket连接
+  
+  // 监听切换到Studio的事件
+  window.addEventListener('switchToStudio', handleSwitchToStudio);
 })
 
 onUnmounted(() => {
   disconnectWebSocket() // 组件卸载时，断开WebSocket连接
+  
+  // 清理事件监听器
+  window.removeEventListener('switchToStudio', handleSwitchToStudio);
 })
 
 // --- 其他函数 ---

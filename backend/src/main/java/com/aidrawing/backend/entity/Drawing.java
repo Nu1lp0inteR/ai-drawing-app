@@ -25,6 +25,12 @@ public class Drawing {
     @Column(updatable = false, nullable = false)
     private String id;
 
+    // 用户关联 - 每个作品都属于一个用户
+    // User association - each artwork belongs to a user
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @Column(columnDefinition = "TEXT")
     private String prompt;
 
@@ -153,5 +159,13 @@ public class Drawing {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 }

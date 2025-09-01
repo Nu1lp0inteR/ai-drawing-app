@@ -1,0 +1,89 @@
+# AI绘画平台 - Docker Compose 配置文件
+# 企业级部署配置说明：
+# 1. 使用容器化技术确保环境一致性
+# 2. 分离服务依赖，便于独立扩展
+# 3. 数据持久化配置，确保数据安全
+
+version: '3.8'
+
+services:
+  # Redis 缓存服务
+  redis:
+    image: redis:7-alpine
+    container_name: ai-drawing-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      # 数据持久化：将Redis数据保存到宿主机
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - ai-drawing-network
+
+  # MySQL 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: ai-drawing-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: DB_PASSWORD_PLACEHOLDER
+      MYSQL_DATABASE: ai_drawing_db
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      # 数据持久化：将MySQL数据保存到宿主机
+      - mysql_data:/var/lib/mysql
+      # 配置文件挂载（可选）
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d
+    restart: unless-stopped
+    networks:
+      - ai-drawing-network
+
+  # RabbitMQ 消息队列服务
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: ai-drawing-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"    # AMQP端口
+      - "15672:15672"  # 管理界面端口
+    volumes:
+      # 数据持久化
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    networks:
+      - ai-drawing-network
+
+  # 可选：Redis 管理界面
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: ai-drawing-redis-ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - ai-drawing-network
+
+# 数据卷定义
+volumes:
+  redis_data:
+    driver: local
+  mysql_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+# 网络定义
+networks:
+  ai-drawing-network:
+    driver: bridge
+
+

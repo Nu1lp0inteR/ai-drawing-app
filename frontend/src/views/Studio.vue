@@ -57,9 +57,31 @@
           <el-icon :size="60"><IconPicture /></el-icon>
           <p>生成的图片将在这里显示</p>
         </div>
-        <img v-if="imageUrl" :src="imageUrl" alt="Generated Art" class="generated-image" 
-             @load="console.log('[Studio] 🖼️ Image loaded successfully:', imageUrl)"
-             @error="console.error('[Studio] ❌ Image load failed:', imageUrl)"/>
+        <div v-if="imageUrl" class="image-result-container">
+          <img :src="imageUrl" alt="Generated Art" class="generated-image" 
+               @load="console.log('[Studio] 🖼️ Image loaded successfully:', imageUrl)"
+               @error="console.error('[Studio] ❌ Image load failed:', imageUrl)"/>
+          
+          <!-- 图片操作区域 -->
+          <div class="image-actions">
+            <el-button 
+              type="primary" 
+              :loading="isSharing"
+              @click="shareToGallery"
+              :icon="Share"
+            >
+              {{ isSharing ? '分享中...' : '分享到画廊' }}
+            </el-button>
+            
+            <el-button 
+              type="default"
+              @click="downloadImage"
+              :icon="Download"
+            >
+              下载图片
+            </el-button>
+          </div>
+        </div>
         <div v-if="!isLoggedIn" class="login-prompt">
             <el-icon :size="60"><Lock /></el-icon>
             <p>登录后即可开始您的创作之旅</p>
@@ -71,10 +93,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject, watch } from 'vue'
+import { ref, reactive, inject, watch, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { MagicStick, Picture as IconPicture, Refresh, Promotion, Lock } from '@element-plus/icons-vue'
+import { MagicStick, Picture as IconPicture, Refresh, Promotion, Lock, Share, Download } from '@element-plus/icons-vue'
 
 // --- 依赖注入 ---
 const isLoggedIn = inject('isLoggedIn')
@@ -92,6 +114,8 @@ const params = reactive({
 })
 const imageUrl = ref(null)
 const isLoading = ref(false)
+const currentDrawingId = ref(null) // 存储当前生成图片的ID
+const isSharing = ref(false) // 分享状态
 
 const samplerOptions = [
   { value: 'euler_ancestral', label: 'euler_ancestral' },
@@ -120,7 +144,9 @@ watch(lastCompletedDrawing, (newDrawing) => {
     const newImageUrl = `http://localhost:8080/api/v1/images/${newDrawing.stored_filename}`;
     console.log('[Studio] 🖼️ Setting image URL to:', newImageUrl);
     imageUrl.value = newImageUrl;
+    currentDrawingId.value = newDrawing.id; // 保存当前图片的ID
     console.log('[Studio] 🖼️ imageUrl.value is now:', imageUrl.value);
+    console.log('[Studio] 📝 Drawing ID stored:', currentDrawingId.value);
     isLoading.value = false; // 停止加载状态
     ElMessage.success('图片生成成功！');
   } else {
@@ -129,6 +155,103 @@ watch(lastCompletedDrawing, (newDrawing) => {
 }, { deep: true, immediate: true }); // 添加 immediate: true 来立即执行一次检查
 
 // --- 函数 ---
+// 企业级参数复用功能 - 从localStorage获取并填充参数
+const loadParametersFromStorage = () => {
+  const storedParams = localStorage.getItem('autoFillParams');
+  if (storedParams) {
+    try {
+      const parsedParams = JSON.parse(storedParams);
+      console.log('[Studio] 📝 Loading parameters from storage:', parsedParams);
+      
+      // 映射参数名称（处理命名差异）
+      if (parsedParams.prompt) params.prompt = parsedParams.prompt;
+      if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt;
+      if (parsedParams.steps) params.steps = parsedParams.steps;
+      if (parsedParams.cfg) params.cfg = parsedParams.cfg;
+      if (parsedParams.samplerName) params.sampler_name = parsedParams.samplerName;
+      if (parsedParams.seed) params.seed = parsedParams.seed;
+      
+      // 清除localStorage中的参数，避免重复加载
+      localStorage.removeItem('autoFillParams');
+      
+      ElMessage.success('参数已自动填充，您可以直接生成或修改后再生成');
+    } catch (error) {
+      console.error('[Studio] Failed to parse stored parameters:', error);
+      localStorage.removeItem('autoFillParams');
+    }
+  }
+};
+
+// 监听参数加载事件
+const handleLoadAutoFillParams = () => {
+  loadParametersFromStorage();
+};
+
+// 生命周期钩子
+onMounted(() => {
+  loadParametersFromStorage(); // 组件挂载时检查一次
+  
+  // 监听来自App.vue的参数加载事件
+  window.addEventListener('loadAutoFillParams', handleLoadAutoFillParams);
+});
+
+// 清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener('loadAutoFillParams', handleLoadAutoFillParams);
+});
+
+// 分享到画廊功能 - 企业级用户体验设计
+const shareToGallery = async () => {
+  if (!currentDrawingId.value) {
+    ElMessage.warning('请先生成一张图片再分享');
+    return;
+  }
+
+  if (!isLoggedIn.value) {
+    ElMessage.warning('请先登录再分享作品');
+    showLoginDialog();
+    return;
+  }
+
+  try {
+    isSharing.value = true;
+    const response = await axios.post(
+      `http://localhost:8080/api/v1/ai-drawing/${currentDrawingId.value}/share`
+    );
+    
+    if (response.status === 200) {
+      ElMessage.success('作品已成功分享到画廊！🎉');
+    }
+  } catch (error) {
+    console.error('分享到画廊失败:', error);
+    if (error.response?.status === 404) {
+      ElMessage.error('作品不存在，无法分享');
+    } else {
+      ElMessage.error('分享失败，请稍后重试');
+    }
+  } finally {
+    isSharing.value = false;
+  }
+};
+
+// 下载图片功能
+const downloadImage = () => {
+  if (!imageUrl.value) {
+    ElMessage.warning('没有可下载的图片');
+    return;
+  }
+
+  // 创建一个临时的a标签来触发下载
+  const link = document.createElement('a');
+  link.href = imageUrl.value;
+  link.download = `ai-artwork-${Date.now()}.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  ElMessage.success('图片下载已开始');
+};
+
 const handleRandomSeed = () => {
   params.seed = String(Math.floor(Math.random() * 1000000000000000))
 }
@@ -206,10 +329,56 @@ const handleSubmit = async () => {
   color: #a8abb2;
   text-align: center;
 }
-.generated-image {
+.image-result-container {
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.generated-image {
+  width: 100%;
+  flex: 1;
   object-fit: contain;
+  border-radius: 8px;
+}
+
+.image-actions {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 50px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.image-result-container:hover .image-actions {
+  opacity: 1;
+}
+
+.image-actions .el-button {
+  border-radius: 20px;
+  font-weight: 600;
+  padding: 8px 16px;
+}
+
+.image-actions .el-button--primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+}
+
+.image-actions .el-button--default {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #666;
 }
 .login-prompt {
     display: flex;
