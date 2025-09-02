@@ -43,7 +43,8 @@ public class HybridGalleryController {
      * 企业级缓存优化：使用Redis缓存提升性能
      */
     @GetMapping("/gallery")
-    @Cacheable(value = "hybridGalleryCache", key = "'publicGallery'")
+    // 临时移除缓存注解，修复序列化问题
+    // @Cacheable(value = "hybridGalleryCache", key = "'publicGallery'")
     public ResponseEntity<List<Map<String, Object>>> getHybridGallery() {
         logger.info("🔄 开始混合画廊查询 - 优先使用数据库数据");
         

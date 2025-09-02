@@ -85,7 +85,7 @@
         <div v-if="!isLoggedIn" class="login-prompt">
             <el-icon :size="60"><Lock /></el-icon>
             <p>登录后即可开始您的创作之旅</p>
-            <el-button type="primary" @click="showLoginDialog">立即登录</el-button>
+            <el-button type="primary" @click="showAuthDialog">立即登录</el-button>
         </div>
       </div>
     </el-main>
@@ -100,7 +100,8 @@ import { MagicStick, Picture as IconPicture, Refresh, Promotion, Lock, Share, Do
 
 // --- 依赖注入 ---
 const isLoggedIn = inject('isLoggedIn')
-const showLoginDialog = inject('showLoginDialog')
+const userInfo = inject('userInfo')
+const showAuthDialog = inject('showAuthDialog')
 const lastCompletedDrawing = inject('lastCompletedDrawing') // 注入最新完成的绘图数据
 
 // --- 状态管理 ---
@@ -138,10 +139,11 @@ watch(lastCompletedDrawing, (newDrawing) => {
     console.log('[Studio] 🔍 All keys in newDrawing:', Object.keys(newDrawing));
   }
   
-  if (newDrawing && newDrawing.stored_filename) {
+  if (newDrawing && (newDrawing.stored_filename || newDrawing.storedFilename)) {
     console.log('[Studio] Detected new completed drawing via watcher:', newDrawing);
-    // 构建完整的图片URL
-    const newImageUrl = `http://localhost:8080/api/v1/images/${newDrawing.stored_filename}`;
+    // 构建完整的图片URL - 兼容两种命名方式
+    const filename = newDrawing.stored_filename || newDrawing.storedFilename;
+    const newImageUrl = `http://localhost:8080/api/v1/images/${filename}`;
     console.log('[Studio] 🖼️ Setting image URL to:', newImageUrl);
     imageUrl.value = newImageUrl;
     currentDrawingId.value = newDrawing.id; // 保存当前图片的ID
@@ -150,7 +152,7 @@ watch(lastCompletedDrawing, (newDrawing) => {
     isLoading.value = false; // 停止加载状态
     ElMessage.success('图片生成成功！');
   } else {
-    console.log('[Studio] ❌ Condition failed - newDrawing:', !!newDrawing, 'stored_filename:', newDrawing?.stored_filename);
+    console.log('[Studio] ❌ Condition failed - newDrawing:', !!newDrawing, 'stored_filename:', newDrawing?.stored_filename, 'storedFilename:', newDrawing?.storedFilename);
   }
 }, { deep: true, immediate: true }); // 添加 immediate: true 来立即执行一次检查
 
@@ -209,14 +211,21 @@ const shareToGallery = async () => {
 
   if (!isLoggedIn.value) {
     ElMessage.warning('请先登录再分享作品');
-    showLoginDialog();
+    showAuthDialog();
     return;
   }
 
   try {
     isSharing.value = true;
+    
+    // 获取认证token
+    const token = localStorage.getItem('accessToken')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    
     const response = await axios.post(
-      `http://localhost:8080/api/v1/ai-drawing/${currentDrawingId.value}/share`
+      `http://localhost:8080/api/v1/ai-drawing/${currentDrawingId.value}/share`,
+      {},
+      { headers }
     );
     
     if (response.status === 200) {
@@ -259,7 +268,7 @@ const handleRandomSeed = () => {
 const handleSubmit = async () => {
   if (!isLoggedIn.value) {
     ElMessage.warning('请先登录再进行绘图！')
-    showLoginDialog()
+    showAuthDialog()
     return
   }
 
@@ -268,7 +277,12 @@ const handleSubmit = async () => {
 
   try {
     const backendUrl = 'http://localhost:8080/api/v1/ai-drawing/generate'
-    const response = await axios.post(backendUrl, params)
+    
+    // 获取认证token
+    const token = localStorage.getItem('accessToken')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
+    
+    const response = await axios.post(backendUrl, params, { headers })
 
     if (response.data.status === 'QUEUED') {
         ElMessage.info('任务已成功进入队列，请等待生成完成...')

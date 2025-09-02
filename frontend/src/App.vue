@@ -2,7 +2,7 @@
 import { ref, provide, onMounted, onUnmounted } from 'vue'
 import Studio from './views/Studio.vue'
 import Gallery from './views/Gallery.vue'
-import LoginDialog from './components/LoginDialog.vue'
+import AuthDialog from './components/AuthDialog.vue'
 import { User, Picture as IconPicture, Brush } from '@element-plus/icons-vue'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
@@ -11,7 +11,8 @@ import { ElNotification } from 'element-plus'
 // --- 状态管理 ---
 const activeView = ref('Studio')
 const isLoggedIn = ref(false)
-const loginDialogVisible = ref(false)
+const authDialogVisible = ref(false)
+const userInfo = ref(null) // 存储用户信息
 const lastCompletedDrawing = ref(null) // 用于存放最新完成的绘图数据
 
 // --- WebSocket 客户端实例 ---
@@ -19,7 +20,8 @@ let stompClient = null
 
 // --- provide (依赖注入) ---
 provide('isLoggedIn', isLoggedIn)
-provide('showLoginDialog', () => { loginDialogVisible.value = true })
+provide('userInfo', userInfo)
+provide('showAuthDialog', () => { authDialogVisible.value = true })
 provide('lastCompletedDrawing', lastCompletedDrawing) // 将最新绘图数据注入子组件
 
 // --- WebSocket 连接逻辑 ---
@@ -75,6 +77,39 @@ const disconnectWebSocket = () => {
   }
 }
 
+// --- 认证相关函数 ---
+const handleLoginSuccess = (user) => {
+  console.log('🎉 [App] 用户登录成功:', user);
+  isLoggedIn.value = true;
+  userInfo.value = user;
+  authDialogVisible.value = false;
+};
+
+const handleLogout = () => {
+  console.log('👋 [App] 用户退出登录');
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('userInfo');
+  isLoggedIn.value = false;
+  userInfo.value = null;
+};
+
+const checkAuthStatus = () => {
+  const token = localStorage.getItem('accessToken');
+  const storedUserInfo = localStorage.getItem('userInfo');
+  
+  if (token && storedUserInfo) {
+    try {
+      userInfo.value = JSON.parse(storedUserInfo);
+      isLoggedIn.value = true;
+      console.log('🔄 [App] 从本地存储恢复登录状态:', userInfo.value.username);
+    } catch (error) {
+      console.error('❌ [App] 解析用户信息失败:', error);
+      handleLogout(); // 清除损坏的数据
+    }
+  }
+};
+
 // --- 事件监听：处理从画廊跳转到创作中心的请求 ---
 const handleSwitchToStudio = (event) => {
   activeView.value = 'Studio';
@@ -88,6 +123,7 @@ const handleSwitchToStudio = (event) => {
 
 // --- Vue 生命周期钩子 ---
 onMounted(() => {
+  checkAuthStatus() // 检查本地存储的登录状态
   connectWebSocket() // 组件挂载时，建立WebSocket连接
   
   // 监听切换到Studio的事件
@@ -101,11 +137,7 @@ onUnmounted(() => {
   window.removeEventListener('switchToStudio', handleSwitchToStudio);
 })
 
-// --- 其他函数 ---
-const handleLoginSuccess = () => {
-  isLoggedIn.value = true
-  loginDialogVisible.value = false
-}
+// 已移动到上方的认证相关函数中
 </script>
 
 <template>
@@ -128,15 +160,18 @@ const handleLoginSuccess = () => {
           </el-menu-item>
         </el-menu>
         <div class="user-section">
-          <el-button v-if="!isLoggedIn" @click="loginDialogVisible = true" :icon="User" round>
+          <el-button v-if="!isLoggedIn" @click="authDialogVisible = true" :icon="User" round>
             登录 / 注册
           </el-button>
-          <el-dropdown v-else>
-            <el-avatar src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" />
+          <el-dropdown v-else @command="handleLogout">
+            <span class="user-display">
+              <el-avatar src="https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png" />
+              <span class="username">{{ userInfo?.username }}</span>
+            </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item>个人中心</el-dropdown-item>
-                <el-dropdown-item divided @click="isLoggedIn = false">退出登录</el-dropdown-item>
+                <el-dropdown-item disabled>{{ userInfo?.email }}</el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -152,7 +187,11 @@ const handleLoginSuccess = () => {
     </el-main>
 
     <!-- 登录对话框组件 (无变动) -->
-    <LoginDialog v-model="loginDialogVisible" @login-success="handleLoginSuccess" />
+    <!-- 认证对话框 -->
+    <AuthDialog 
+      v-model="authDialogVisible" 
+      @login-success="handleLoginSuccess" 
+    />
   </el-container>
 </template>
 
@@ -196,6 +235,18 @@ const handleLoginSuccess = () => {
   width: 150px;
   display: flex;
   justify-content: flex-end;
+}
+
+.user-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.username {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
 }
 .main-content {
   flex-grow: 1;

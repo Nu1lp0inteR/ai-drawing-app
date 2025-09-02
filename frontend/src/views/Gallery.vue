@@ -20,7 +20,7 @@ const fetchGallery = async () => {
   try {
     isLoading.value = true;
     console.log('[Gallery] 🔄 开始获取画廊数据...');
-    // 混合API - 优先使用数据库，失败时自动回退
+    // 使用修复后的混合API - 支持数据库数据和回退机制
     console.log('[Gallery] 📡 请求URL:', `${backendBaseUrl}/api/v1/hybrid/gallery`);
     
     const response = await axios.get(`${backendBaseUrl}/api/v1/hybrid/gallery`);

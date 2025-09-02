@@ -217,4 +217,48 @@ public class JwtService {
         String tokenType = getTokenType(token);
         return "access".equals(tokenType);
     }
+
+    // ===== JWT认证过滤器专用方法 =====
+    
+    /**
+     * 从Token中提取用户名
+     * Extract username from token
+     */
+    public String extractUsername(String token) {
+        try {
+            return extractClaim(token, claims -> claims.get("username", String.class));
+        } catch (Exception e) {
+            logger.warn("❌ 提取用户名失败: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * 验证Token是否有效（用于认证过滤器）
+     * Validate token (for authentication filter)
+     */
+    public boolean isTokenValid(String token) {
+        return validateAccessToken(token);
+    }
+    
+    /**
+     * 从Token中提取特定声明
+     * Extract specific claim from token
+     */
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+    
+    /**
+     * 提取所有声明
+     * Extract all claims
+     */
+    private Claims extractAllClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
 }

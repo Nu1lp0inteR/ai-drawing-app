@@ -1,5 +1,6 @@
 package com.aidrawing.backend.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -8,6 +9,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -28,6 +30,13 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @Autowired
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+    }
 
     /**
      * 密码编码器配置
@@ -74,7 +83,7 @@ public class SecurityConfig {
                     "/api/v1/enterprise/gallery/public", // 企业级公共画廊
                     "/api/v1/enterprise/gallery/health", // 健康检查
                     "/api/v1/images/**",         // 图片访问
-                    "/websocket/**",             // WebSocket连接
+                    "/ws/**",                    // WebSocket连接 - 修正路径
                     "/error"                     // 错误页面
                 ).permitAll()
                 
@@ -98,7 +107,11 @@ public class SecurityConfig {
             
             // 禁用HTTP Basic认证
             // Disable HTTP Basic authentication
-            .httpBasic(basic -> basic.disable());
+            .httpBasic(basic -> basic.disable())
+            
+            // 添加JWT认证过滤器
+            // Add JWT authentication filter
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
