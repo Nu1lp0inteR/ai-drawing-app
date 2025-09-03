@@ -3,11 +3,14 @@
 package com.aidrawing.backend.repository;
 
 import com.aidrawing.backend.entity.Drawing;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface DrawingRepository extends JpaRepository<Drawing, String> {
@@ -24,5 +27,38 @@ public interface DrawingRepository extends JpaRepository<Drawing, String> {
      */
     @Query("SELECT d FROM Drawing d WHERE d.sharedToGallery = true ORDER BY d.createdAt DESC")
     List<Drawing> findBySharedToGalleryTrueOrderByCreatedAtDesc();
+
+    /**
+     * 查找所有已分享到公共画廊的绘图，包含作者信息，避免N+1查询问题
+     */
+    @Query("SELECT d FROM Drawing d LEFT JOIN FETCH d.user WHERE d.sharedToGallery = true ORDER BY d.createdAt DESC")
+    List<Drawing> findBySharedToGalleryTrueWithUserOrderByCreatedAtDesc();
+
+    // --- 个人中心相关查询方法 ---
+
+    /**
+     * 分页查询指定用户的所有作品
+     */
+    Page<Drawing> findByUserId(String userId, Pageable pageable);
+
+    /**
+     * 统计指定用户的总作品数
+     */
+    Long countByUserId(String userId);
+
+    /**
+     * 统计指定用户的已分享作品数
+     */
+    Long countByUserIdAndSharedToGallery(String userId, Boolean sharedToGallery);
+
+    /**
+     * 获取指定用户最新的作品（用于统计最后活跃时间）
+     */
+    Optional<Drawing> findTopByUserIdOrderByCreatedAtDesc(String userId);
+
+    /**
+     * 获取指定用户最近的N张作品
+     */
+    List<Drawing> findTop10ByUserIdOrderByCreatedAtDesc(String userId);
 }
 

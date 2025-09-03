@@ -40,6 +40,13 @@ public class GalleryItemDto {
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     @JsonProperty("createdAt") // 驼峰命名需要明确指定
     private LocalDateTime createdAt;
+    
+    // 作者信息
+    @JsonProperty("authorName")
+    private String authorName;
+    
+    @JsonProperty("authorId") 
+    private String authorId;
 
     // 默认构造函数
     public GalleryItemDto() {}
@@ -56,6 +63,15 @@ public class GalleryItemDto {
         this.storedFilename = drawing.getStoredFilename();
         this.sharedToGallery = drawing.isSharedToGallery();
         this.createdAt = drawing.getCreatedAt();
+        
+        // 设置作者信息
+        if (drawing.getUser() != null) {
+            this.authorName = drawing.getUser().getUsername();
+            this.authorId = drawing.getUser().getId();
+        } else {
+            this.authorName = "匿名用户";
+            this.authorId = null;
+        }
     }
 
     // Getters and Setters
@@ -137,5 +153,21 @@ public class GalleryItemDto {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getAuthorName() {
+        return authorName;
+    }
+
+    public void setAuthorName(String authorName) {
+        this.authorName = authorName;
+    }
+
+    public String getAuthorId() {
+        return authorId;
+    }
+
+    public void setAuthorId(String authorId) {
+        this.authorId = authorId;
     }
 }

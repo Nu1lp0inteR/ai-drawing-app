@@ -2,6 +2,7 @@
 import { ref, onMounted, onActivated } from 'vue';
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
+import { User, Picture } from '@element-plus/icons-vue';
 import ArtworkDetailModal from '@/components/ArtworkDetailModal.vue';
 
 // --- 状态管理 ---
@@ -137,6 +138,13 @@ onActivated(() => {
             >
               <p class="prompt-text">{{ item.prompt }}</p>
             </el-tooltip>
+            
+            <!-- 作者信息 -->
+            <div class="author-info">
+              <el-icon><User /></el-icon>
+              <span class="author-name">{{ item.authorName || '匿名用户' }}</span>
+            </div>
+            
             <div class="item-actions">
               <el-button type="primary" size="small" @click.stop="showArtworkDetail(item)">
                 查看详情
@@ -194,6 +202,25 @@ onActivated(() => {
 }
 .gallery-item:hover .item-info {
   opacity: 1;
+}
+
+.author-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: 4px;
+}
+
+.author-info .el-icon {
+  font-size: 14px;
+  color: #67c23a;
+}
+
+.author-name {
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .item-actions {

@@ -14,6 +14,7 @@ public class DrawingRequest {
     // 我们将类型更改为String，以与Drawing实体完美匹配。
     // 这提供了更大的灵活性，并防止了类型不匹配的错误。
     private String seed;
+    private String userId; // 用户ID，用于关联图片到用户
 
     // Getters and Setters
     public String getPrompt() {
@@ -64,6 +65,14 @@ public class DrawingRequest {
         this.seed = seed;
     }
 
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
     @Override
     public String toString() {
         return "DrawingRequest{" +
@@ -73,6 +82,7 @@ public class DrawingRequest {
                 ", cfg=" + cfg +
                 ", samplerName='" + samplerName + '\'' +
                 ", seed='" + seed + '\'' +
+                ", userId='" + userId + '\'' +
                 '}';
     }
 }

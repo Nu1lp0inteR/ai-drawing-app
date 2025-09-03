@@ -109,7 +109,7 @@
   },
   "82": {
     "inputs": {
-      "ckpt_name": "pca-tv-mtd-illv20-idx0-personalv30-r-te0.4-oeaiv12ue-r-te0.4.safetensors",
+      "ckpt_name": "pca-tv-mtd.safetensors",
       "vae_name": "Baked VAE",
       "clip_skip": -2,
       "lora_name": "None",

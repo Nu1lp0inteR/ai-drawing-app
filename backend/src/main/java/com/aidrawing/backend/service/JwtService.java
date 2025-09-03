@@ -234,6 +234,19 @@ public class JwtService {
     }
     
     /**
+     * 从Token中提取用户ID
+     * Extract user ID from token (from subject)
+     */
+    public String extractUserId(String token) {
+        try {
+            return extractClaim(token, Claims::getSubject);
+        } catch (Exception e) {
+            logger.warn("❌ 提取用户ID失败: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
      * 验证Token是否有效（用于认证过滤器）
      * Validate token (for authentication filter)
      */

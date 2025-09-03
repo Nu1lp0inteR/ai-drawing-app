@@ -2,6 +2,7 @@
 import { ref, provide, onMounted, onUnmounted } from 'vue'
 import Studio from './views/Studio.vue'
 import Gallery from './views/Gallery.vue'
+import Profile from './views/Profile.vue'
 import AuthDialog from './components/AuthDialog.vue'
 import { User, Picture as IconPicture, Brush } from '@element-plus/icons-vue'
 import { Client } from '@stomp/stompjs'
@@ -43,15 +44,46 @@ const connectWebSocket = () => {
     console.log('Connected to WebSocket:', frame)
     // 订阅公共广播频道
     stompClient.subscribe('/topic/drawing_complete', (message) => {
-      console.log('🎉 [App] Received drawing completion message:', message.body)
-      const completedDrawing = JSON.parse(message.body)
-      console.log('🎉 [App] Parsed drawing data:', completedDrawing)
+      console.log('📨 [App] Received drawing message:', message.body)
+      const messageData = JSON.parse(message.body)
+      console.log('📨 [App] Parsed message data:', messageData)
+      
+      // 检查是否是失败消息
+      if (messageData.status === 'FAILED') {
+        console.error('❌ [App] Drawing task failed:', messageData.error)
+        
+        // 发送失败事件给Studio组件
+        window.dispatchEvent(new CustomEvent('drawingFailed', { 
+          detail: { 
+            error: messageData.error,
+            timestamp: messageData.timestamp 
+          } 
+        }))
+        
+        // 显示失败通知
+        ElNotification({
+          title: '绘图失败',
+          message: messageData.error || '生图服务暂时不可用，请稍后重试',
+          type: 'error',
+          duration: 5000
+        })
+        return
+      }
+      
+      // 处理成功消息
+      console.log('🎉 [App] Drawing completed successfully:', messageData)
       
       // 更新最新完成的绘图数据
-      lastCompletedDrawing.value = completedDrawing
+      lastCompletedDrawing.value = messageData
       console.log('🎉 [App] Updated lastCompletedDrawing.value:', lastCompletedDrawing.value)
 
-      // 弹出一个成功的通知
+      // 通知个人中心有新图片生成
+      window.dispatchEvent(new CustomEvent('drawingCompleted', { 
+        detail: messageData 
+      }))
+      console.log('📡 [App] 已通知个人中心有新图片生成')
+
+      // 弹出成功通知
       ElNotification({
         title: '绘图完成！',
         message: '您的新作品已生成，快去看看吧！',
@@ -90,8 +122,37 @@ const handleLogout = () => {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('userInfo');
+  localStorage.removeItem('ai_drawing_history'); // 清空历史图片记录
   isLoggedIn.value = false;
   userInfo.value = null;
+  
+  // 通知其他组件清空历史记录
+  window.dispatchEvent(new CustomEvent('clearHistory'));
+  
+  // 通知个人中心清空数据
+  window.dispatchEvent(new CustomEvent('userLogout'));
+  console.log('📡 [App] 已通知个人中心清理数据');
+};
+
+// JWT token过期检测函数
+const isTokenExpired = (token) => {
+  if (!token) return true;
+  
+  try {
+    // JWT token格式: header.payload.signature
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    
+    // 解码payload (base64)
+    const payload = JSON.parse(atob(parts[1]));
+    const currentTime = Math.floor(Date.now() / 1000); // 当前时间戳(秒)
+    
+    // 检查是否过期 (exp字段是过期时间戳)
+    return payload.exp && payload.exp < currentTime;
+  } catch (error) {
+    console.error('❌ [App] JWT token解析失败:', error);
+    return true; // 解析失败视为过期
+  }
 };
 
 const checkAuthStatus = () => {
@@ -99,16 +160,43 @@ const checkAuthStatus = () => {
   const storedUserInfo = localStorage.getItem('userInfo');
   
   if (token && storedUserInfo) {
+    // 检查token是否过期
+    if (isTokenExpired(token)) {
+      console.warn('⚠️ [App] JWT token已过期，清除登录状态');
+      handleLogout(); // 自动登出
+      ElNotification({
+        title: '登录已过期',
+        message: '您的登录已过期，请重新登录',
+        type: 'warning',
+        duration: 3000
+      });
+      return;
+    }
+    
     try {
       userInfo.value = JSON.parse(storedUserInfo);
       isLoggedIn.value = true;
-      console.log('🔄 [App] 从本地存储恢复登录状态:', userInfo.value.username);
+      console.log('✅ [App] 从本地存储恢复登录状态:', userInfo.value.username);
     } catch (error) {
       console.error('❌ [App] 解析用户信息失败:', error);
       handleLogout(); // 清除损坏的数据
     }
   }
 };
+
+// --- 组件路由逻辑 ---
+const getActiveComponent = () => {
+  switch (activeView.value) {
+    case 'Studio':
+      return Studio
+    case 'Gallery':
+      return Gallery
+    case 'Profile':
+      return Profile
+    default:
+      return Studio
+  }
+}
 
 // --- 事件监听：处理从画廊跳转到创作中心的请求 ---
 const handleSwitchToStudio = (event) => {
@@ -158,6 +246,10 @@ onUnmounted(() => {
             <el-icon><IconPicture /></el-icon>
             画廊
           </el-menu-item>
+          <el-menu-item index="Profile" v-if="isLoggedIn">
+            <el-icon><User /></el-icon>
+            个人中心
+          </el-menu-item>
         </el-menu>
         <div class="user-section">
           <el-button v-if="!isLoggedIn" @click="authDialogVisible = true" :icon="User" round>
@@ -179,10 +271,10 @@ onUnmounted(() => {
       </div>
     </el-header>
 
-    <!-- 主内容区 (无变动) -->
+    <!-- 主内容区 -->
     <el-main class="main-content">
       <keep-alive>
-        <component :is="activeView === 'Studio' ? Studio : Gallery" />
+        <component :is="getActiveComponent()" />
       </keep-alive>
     </el-main>
 

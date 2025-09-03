@@ -7,10 +7,14 @@ import com.aidrawing.backend.entity.Drawing;
 import com.aidrawing.backend.repository.DrawingRepository;
 import com.aidrawing.backend.service.DrawingTaskService;
 import com.aidrawing.backend.service.GalleryService;
+import com.aidrawing.backend.service.JwtService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,19 +23,36 @@ import java.util.Optional;
 @RequestMapping("/api/v1/ai-drawing")
 public class DrawingController {
 
+    private static final Logger logger = LoggerFactory.getLogger(DrawingController.class);
+
     private final DrawingTaskService drawingTaskService;
     private final GalleryService galleryService;
     private final DrawingRepository drawingRepository;
+    private final JwtService jwtService;
 
     @Autowired
-    public DrawingController(DrawingTaskService drawingTaskService, GalleryService galleryService, DrawingRepository drawingRepository) {
+    public DrawingController(DrawingTaskService drawingTaskService, GalleryService galleryService, DrawingRepository drawingRepository, JwtService jwtService) {
         this.drawingTaskService = drawingTaskService;
         this.galleryService = galleryService;
         this.drawingRepository = drawingRepository;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/generate")
-    public ResponseEntity<?> generateImage(@RequestBody DrawingRequest request) {
+    public ResponseEntity<?> generateImage(@RequestBody DrawingRequest request, HttpServletRequest httpRequest) {
+        // 从JWT中提取用户ID
+        String authHeader = httpRequest.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            try {
+                String userId = jwtService.extractUserId(token);
+                request.setUserId(userId); // 设置用户ID到请求中
+                logger.info("🔑 [DrawingController] 为生图任务设置用户ID: {}", userId);
+            } catch (Exception e) {
+                logger.warn("⚠️ [DrawingController] 无法从JWT提取用户ID: {}", e.getMessage());
+            }
+        }
+        
         drawingTaskService.sendDrawingTask(request);
         return ResponseEntity.ok(Map.of("message", "Task has been successfully queued.", "status", "QUEUED"));
     }

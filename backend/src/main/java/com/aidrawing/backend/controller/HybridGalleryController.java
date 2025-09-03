@@ -1,5 +1,6 @@
 package com.aidrawing.backend.controller;
 
+import com.aidrawing.backend.dto.GalleryItemDto;
 import com.aidrawing.backend.entity.Drawing;
 import com.aidrawing.backend.repository.DrawingRepository;
 import org.slf4j.Logger;
@@ -45,38 +46,22 @@ public class HybridGalleryController {
     @GetMapping("/gallery")
     // 临时移除缓存注解，修复序列化问题
     // @Cacheable(value = "hybridGalleryCache", key = "'publicGallery'")
-    public ResponseEntity<List<Map<String, Object>>> getHybridGallery() {
+    public ResponseEntity<List<GalleryItemDto>> getHybridGallery() {
         logger.info("🔄 开始混合画廊查询 - 优先使用数据库数据");
         
         try {
-            // 第一步：尝试从数据库获取真实数据
-            List<Drawing> dbDrawings = drawingRepository.findBySharedToGalleryTrueOrderByCreatedAtDesc();
+            // 第一步：尝试从数据库获取真实数据（包含作者信息）
+            List<Drawing> dbDrawings = drawingRepository.findBySharedToGalleryTrueWithUserOrderByCreatedAtDesc();
             logger.info("✅ 成功从数据库获取 {} 条记录", dbDrawings.size());
             
             if (!dbDrawings.isEmpty()) {
-                // 转换为Map格式，与前端兼容
-                List<Map<String, Object>> result = new ArrayList<>();
+                // 使用DTO转换，包含作者信息
+                List<GalleryItemDto> result = new ArrayList<>();
                 for (Drawing drawing : dbDrawings) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("id", drawing.getId());
-                    item.put("prompt", drawing.getPrompt());
-                    item.put("negativePrompt", drawing.getNegativePrompt());
-                    item.put("steps", drawing.getSteps());
-                    item.put("cfg", drawing.getCfg());
-                    item.put("samplerName", drawing.getSamplerName());
-                    item.put("seed", drawing.getSeed());
-                    item.put("storedFilename", drawing.getStoredFilename());
-                    item.put("sharedToGallery", drawing.isSharedToGallery());
-                    
-                    // 特殊处理 LocalDateTime - 转换为字符串避免序列化问题
-                    if (drawing.getCreatedAt() != null) {
-                        item.put("createdAt", drawing.getCreatedAt().toString());
-                    }
-                    
-                    result.add(item);
+                    result.add(new GalleryItemDto(drawing));
                 }
                 
-                logger.info("🎨 返回 {} 张数据库中的真实作品", result.size());
+                logger.info("🎨 返回 {} 张数据库中的真实作品（含作者信息）", result.size());
                 return ResponseEntity.ok(result);
             }
             
@@ -86,34 +71,49 @@ public class HybridGalleryController {
         
         // 第二步：回退到硬编码数据（确保系统可用性）
         logger.info("📦 使用备用硬编码数据");
-        List<Map<String, Object>> fallbackData = List.of(
-            Map.of(
-                "id", "6f6f61de-5147-4118-8842-2ccddb289c4c",
-                "prompt", "1girl, solo, masterpiece, best quality, looking at viewer, white background, standing, long hair, purple hair, blue eyes, maid apron, maid, fukuro daizi",
-                "negativePrompt", "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
-                "steps", 24,
-                "cfg", 6.0,
-                "samplerName", "euler_ancestral",
-                "seed", "231131524336935",
-                "storedFilename", "6f6f61de-5147-4118-8842-2ccddb289c4c.png",
-                "sharedToGallery", true,
-                "createdAt", "2025-09-01T21:35:18"
-            ),
-            Map.of(
-                "id", "fcf74fc3-d03d-4c93-8ebe-43e91ab87f65", 
-                "prompt", "1girl, solo, masterpiece, best quality, looking at viewer, white background, standing, long hair, purple hair, blue eyes, maid apron, maid, fukuro daizi, hagoonha",
-                "negativePrompt", "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
-                "steps", 24,
-                "cfg", 6.0,
-                "samplerName", "euler_ancestral",
-                "seed", "683017158422039",
-                "storedFilename", "fcf74fc3-d03d-4c93-8ebe-43e91ab87f65.png",
-                "sharedToGallery", true,
-                "createdAt", "2025-09-01T21:38:06"
-            )
-        );
+        List<GalleryItemDto> fallbackData = createFallbackData();
         
         return ResponseEntity.ok(fallbackData);
+    }
+
+    /**
+     * 创建fallback数据（包含作者信息）
+     */
+    private List<GalleryItemDto> createFallbackData() {
+        List<GalleryItemDto> fallbackData = new ArrayList<>();
+        
+        // 示例作品1
+        GalleryItemDto item1 = new GalleryItemDto();
+        item1.setId("6f6f61de-5147-4118-8842-2ccddb289c4c");
+        item1.setPrompt("1girl, solo, masterpiece, best quality, looking at viewer, white background, standing, long hair, purple hair, blue eyes, maid apron, maid, fukuro daizi");
+        item1.setNegativePrompt("lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry");
+        item1.setSteps(24);
+        item1.setCfg(6.0);
+        item1.setSamplerName("euler_ancestral");
+        item1.setSeed("231131524336935");
+        item1.setStoredFilename("6f6f61de-5147-4118-8842-2ccddb289c4c.png");
+        item1.setSharedToGallery(true);
+        item1.setAuthorName("示例用户");
+        item1.setAuthorId("demo-user-1");
+        
+        // 示例作品2
+        GalleryItemDto item2 = new GalleryItemDto();
+        item2.setId("fcf74fc3-d03d-4c93-8ebe-43e91ab87f65");
+        item2.setPrompt("1girl, solo, masterpiece, best quality, looking at viewer, white background, standing, long hair, purple hair, blue eyes, maid apron, maid, fukuro daizi, hagoonha");
+        item2.setNegativePrompt("lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry");
+        item2.setSteps(24);
+        item2.setCfg(6.0);
+        item2.setSamplerName("euler_ancestral");
+        item2.setSeed("683017158422039");
+        item2.setStoredFilename("fcf74fc3-d03d-4c93-8ebe-43e91ab87f65.png");
+        item2.setSharedToGallery(true);
+        item2.setAuthorName("AI艺术家");
+        item2.setAuthorId("demo-user-2");
+        
+        fallbackData.add(item1);
+        fallbackData.add(item2);
+        
+        return fallbackData;
     }
 
     /**
