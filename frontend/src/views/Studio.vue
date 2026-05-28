@@ -302,7 +302,6 @@ const loadParametersFromStorage = () => {
     if (parsedParams.prompt) params.prompt = parsedParams.prompt;
     if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt;
     if (parsedParams.negative_prompt) params.negative_prompt = parsedParams.negative_prompt;
-    if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt;
     if (parsedParams.steps) params.steps = parsedParams.steps;
     if (parsedParams.cfg) params.cfg = parsedParams.cfg;
     if (parsedParams.samplerName) params.sampler_name = parsedParams.samplerName;

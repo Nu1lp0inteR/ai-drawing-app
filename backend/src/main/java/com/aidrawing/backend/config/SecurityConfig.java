@@ -99,7 +99,6 @@ public class SecurityConfig {
                     "/api/v1/ai-drawing/share",              // 分享到画廊 (multipart)
                     "/api/v1/ai-drawing/*/share",            // 分享到画廊 (by ID)
                     "/api/v1/ai-drawing/*/unshare",          // 取消分享
-                    "/api/v1/drawings/*",                    // 作品详情/删除 (需认证)
                     "/api/v1/user/**",                       // 用户相关API
                     "/api/v1/profile/**",                    // 用户档案API
                     "/api/v1/follows/current-user/**",      // 当前用户的关注/粉丝列表

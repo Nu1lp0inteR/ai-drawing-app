@@ -100,7 +100,7 @@ async function handleShare(item) {
 async function handleDelete(item) {
   try {
     if (item.source === 'server') {
-      await api.delete(`/api/v1/drawings/${item.id}`);
+      await api.delete(`/api/v1/ai-drawing/${item.id}`);
     } else {
       await deleteDrawing(item.id);
     }
@@ -121,7 +121,7 @@ function handleReuseParams(item) {
     sampler_name: item.sampler_name,
     seed: item.seed,
   }));
-  navigateTo('studio');
+  navigateTo('Studio');
 }
 
 function loadMore() {

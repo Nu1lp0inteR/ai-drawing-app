@@ -187,6 +187,23 @@ public class DrawingController {
         }
     }
 
+    @DeleteMapping("/{drawingId}")
+    public ResponseEntity<?> deleteDrawing(@PathVariable String drawingId) {
+        String userId = jwtService.getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "请先登录"));
+        }
+        Optional<Drawing> drawing = drawingRepository.findById(drawingId);
+        if (drawing.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("message", "作品不存在"));
+        }
+        if (!drawing.get().getUser().getId().equals(userId)) {
+            return ResponseEntity.status(403).body(Map.of("message", "无权删除此作品"));
+        }
+        drawingRepository.delete(drawing.get());
+        return ResponseEntity.ok(Map.of("message", "作品已删除"));
+    }
+
     @GetMapping("/my-history")
     public ResponseEntity<?> getMyHistory(
             @RequestParam(defaultValue = "0") int page,

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onActivated, inject } from 'vue';
+import { ref, onMounted, onActivated, onUnmounted, inject } from 'vue';
 import api from '@/api';
 import { ElMessage, ElButton, ElIcon } from 'element-plus';
 import { User, Picture, Star } from '@element-plus/icons-vue';
@@ -59,7 +59,7 @@ const showArtworkDetail = (artwork) => {
 
 const handleCopyParams = (params) => {
   sessionStorage.setItem('prefillStudioParams', JSON.stringify(params));
-  navigateTo('studio');
+  navigateTo('Studio');
   ElMessage.success('已跳转到创作中心，参数已自动填充');
 };
 
@@ -121,25 +121,36 @@ const toggleLike = async (item) => {
 // --- Vue 生命周期钩子 ---
 
 const loadMoreRef = ref(null);
+let observer = null;
+let isLoadingMore = false;
 
 function loadMore() {
-  if (galleryPage.value < galleryTotalPages.value - 1) {
-    fetchGallery(galleryPage.value + 1);
+  if (!isLoadingMore && galleryPage.value < galleryTotalPages.value - 1) {
+    isLoadingMore = true;
+    fetchGallery(galleryPage.value + 1).finally(() => { isLoadingMore = false; });
   }
 }
 
-onMounted(() => {
-  fetchGallery(0);
-  const observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting && galleryPage.value < galleryTotalPages.value - 1 && !isLoading.value) {
+function setupObserver() {
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !isLoadingMore) {
       loadMore();
     }
   }, { threshold: 0.1 });
   if (loadMoreRef.value) observer.observe(loadMoreRef.value);
+}
+
+onMounted(() => {
+  fetchGallery(0).then(() => setupObserver());
 });
 
 onActivated(() => {
-  fetchGallery(0);
+  fetchGallery(0).then(() => setupObserver());
+});
+
+onUnmounted(() => {
+  if (observer) observer.disconnect();
 });
 
 </script>
