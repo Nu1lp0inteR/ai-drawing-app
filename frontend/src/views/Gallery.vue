@@ -1,75 +1,54 @@
 <script setup>
-import { ref, onMounted, onActivated } from 'vue';
-import axios from 'axios';
-import { ElMessage } from 'element-plus';
-import { User, Picture } from '@element-plus/icons-vue';
+import { ref, onMounted, onActivated, inject } from 'vue';
+import api from '@/api';
+import { ElMessage, ElButton, ElIcon } from 'element-plus';
+import { User, Picture, Star } from '@element-plus/icons-vue';
 import ArtworkDetailModal from '@/components/ArtworkDetailModal.vue';
 
-// --- 状态管理 ---
-const galleryItems = ref([]); // Use a ref to store the list of drawings from the backend.
-const isLoading = ref(true); // Control the loading state.
-const backendBaseUrl = 'http://localhost:8080'; // Define the backend base URL for constructing image paths.
+const galleryItems = ref([]);
+const isLoading = ref(true);
 
 // 模态框相关状态
 const detailModalVisible = ref(false);
 const selectedArtwork = ref(null);
 
-// --- 函数 ---
+// 注入导航函数和登录状态
+const navigateToUserProfile = inject('navigateToUserProfile');
+const navigateTo = inject('navigateTo');
+const isLoggedIn = inject('isLoggedIn');
 
-// 企业级API调用 - 获取画廊数据
-const fetchGallery = async () => {
+// 点赞相关状态
+const likingItems = ref(new Set()); // 正在进行点赞操作的作品ID集合
+
+const galleryPage = ref(0)
+const galleryTotalPages = ref(0)
+const pageSize = 20
+
+const fetchGallery = async (page = 0) => {
   try {
     isLoading.value = true;
-    console.log('[Gallery] 🔄 开始获取画廊数据...');
-    // 使用修复后的混合API - 支持数据库数据和回退机制
-    console.log('[Gallery] 📡 请求URL:', `${backendBaseUrl}/api/v1/hybrid/gallery`);
+    const response = await api.get('/api/v1/gallery', { params: { page, size: pageSize } });
     
-    const response = await axios.get(`${backendBaseUrl}/api/v1/hybrid/gallery`);
-    
-    console.log('[Gallery] ✅ API响应状态:', response.status);
-    console.log('[Gallery] 📦 响应数据:', response.data);
-    console.log('[Gallery] 📊 获取到图片数量:', response.data?.length || 0);
-    
-    galleryItems.value = response.data || [];
-    
-    if (galleryItems.value.length === 0) {
-      console.log('[Gallery] ℹ️ 画廊暂无图片');
+    const data = response.data;
+    if (page === 0) {
+      galleryItems.value = data.content || [];
     } else {
-      console.log('[Gallery] 🖼️ 画廊图片列表:', galleryItems.value.map(item => ({
-        id: item.id,
-        shared: item.sharedToGallery,
-        filename: item.storedFilename
-      })));
+      galleryItems.value = [...galleryItems.value, ...(data.content || [])];
     }
+    galleryPage.value = data.page;
+    galleryTotalPages.value = data.totalPages;
     
   } catch (error) {
-    console.error('[Gallery] ❌ 获取画廊数据失败:', error);
-    console.error('[Gallery] 🔍 错误详情:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      url: error.config?.url
-    });
-    
-    if (error.response?.status === 500) {
-      ElMessage.error("服务器内部错误，请检查后端服务状态");
-    } else if (error.response?.status === 404) {
-      ElMessage.error("API接口不存在，请检查后端配置");
-    } else if (error.code === 'NETWORK_ERROR') {
-      ElMessage.error("网络连接失败，请检查后端是否启动");
-    } else {
-      ElMessage.error(`获取画廊数据失败: ${error.message}`);
-    }
+    console.error('[Gallery] 获取画廊数据失败:', error);
+    ElMessage.error('获取画廊数据失败');
   } finally {
     isLoading.value = false;
-    console.log('[Gallery] 🏁 数据加载完成');
   }
 };
 
 // Constructs the full URL for an image.
 const getImageUrl = (filename) => {
-  return `${backendBaseUrl}/api/v1/images/${filename}`;
+  return `/api/v1/images/${filename}`;
 };
 
 // 显示作品详情 - 企业级用户体验设计
@@ -78,30 +57,91 @@ const showArtworkDetail = (artwork) => {
   detailModalVisible.value = true;
 };
 
-// 处理参数复用 - 跳转到创作中心并填充参数
 const handleCopyParams = (params) => {
-  // 由于没有使用Vue Router，直接使用事件或者localStorage传递参数
-  localStorage.setItem('autoFillParams', JSON.stringify(params));
+  sessionStorage.setItem('prefillStudioParams', JSON.stringify(params));
+  navigateTo('studio');
+  ElMessage.success('已跳转到创作中心，参数已自动填充');
+};
+
+// 跳转到用户主页
+const goToUserProfile = (authorId, authorName) => {
+  if (!authorId) {
+    ElMessage.warning('该作品没有作者信息');
+    return;
+  }
   
-  // 触发切换到Studio视图的事件
-  window.dispatchEvent(new CustomEvent('switchToStudio', { detail: { autoFill: true } }));
+  console.log('🔄 [Gallery] 跳转到用户主页:', authorName, authorId);
+  navigateToUserProfile(authorId);
+};
+
+// 切换点赞状态
+const toggleLike = async (item) => {
+  if (!isLoggedIn.value) {
+    ElMessage.warning('请先登录后再点赞');
+    return;
+  }
   
-  ElMessage.success('即将跳转到创作中心并自动填充参数');
+  if (likingItems.value.has(item.id)) {
+    return; // 防止重复点击
+  }
+  
+  try {
+    likingItems.value.add(item.id);
+    console.log('👍 [Gallery] 切换点赞状态:', item.id, item.isLiked);
+    
+    let response;
+    
+    if (item.isLiked) {
+      response = await api.delete(`/api/v1/likes/drawings/${item.id}`);
+    } else {
+      response = await api.post(`/api/v1/likes/drawings/${item.id}`);
+    }
+    
+    // 更新本地状态
+    item.isLiked = response.data.isLiked;
+    item.likesCount = response.data.likesCount;
+    
+    console.log('✅ [Gallery] 点赞状态更新成功:', response.data);
+    
+  } catch (error) {
+    console.error('❌ [Gallery] 点赞操作失败:', error);
+    
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      ElMessage.error('登录已过期，请重新登录');
+    } else if (error.response?.status === 400) {
+      ElMessage.error(error.response.data.message || '操作失败');
+    } else {
+      ElMessage.error('操作失败，请稍后重试');
+    }
+  } finally {
+    likingItems.value.delete(item.id);
+  }
 };
 
 // --- Vue 生命周期钩子 ---
 
-// 初次挂载时获取画廊数据
+const loadMoreRef = ref(null);
+
+function loadMore() {
+  if (galleryPage.value < galleryTotalPages.value - 1) {
+    fetchGallery(galleryPage.value + 1);
+  }
+}
+
 onMounted(() => {
-  console.log('[Gallery] Component mounted, fetching gallery data...');
-  fetchGallery();
+  fetchGallery(0);
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && galleryPage.value < galleryTotalPages.value - 1 && !isLoading.value) {
+      loadMore();
+    }
+  }, { threshold: 0.1 });
+  if (loadMoreRef.value) observer.observe(loadMoreRef.value);
 });
 
-// 每次激活组件时重新获取画廊数据（解决keep-alive缓存问题）
 onActivated(() => {
-  console.log('[Gallery] Component activated, refreshing gallery data...');
-  fetchGallery();
+  fetchGallery(0);
 });
+
 </script>
 
 <template>
@@ -142,16 +182,39 @@ onActivated(() => {
             <!-- 作者信息 -->
             <div class="author-info">
               <el-icon><User /></el-icon>
-              <span class="author-name">{{ item.authorName || '匿名用户' }}</span>
+              <span 
+                class="author-name" 
+                :class="{ 'clickable': item.authorId }"
+                @click.stop="item.authorId ? goToUserProfile(item.authorId, item.authorName) : null"
+              >
+                {{ item.authorName || '匿名用户' }}
+              </span>
             </div>
             
             <div class="item-actions">
+              <!-- 点赞按钮 -->
+              <el-button 
+                :type="item.isLiked ? 'danger' : 'default'"
+                size="small" 
+                :loading="likingItems.has(item.id)"
+                @click.stop="toggleLike(item)"
+                class="like-button"
+              >
+                <span class="heart-icon" :class="{ 'liked': item.isLiked }">
+                  ♥
+                </span>
+                <span class="like-count">{{ item.likesCount || 0 }}</span>
+              </el-button>
+              
               <el-button type="primary" size="small" @click.stop="showArtworkDetail(item)">
                 查看详情
               </el-button>
             </div>
           </div>
         </el-card>
+      </div>
+      <div ref="loadMoreRef" class="load-more-sentinel" v-if="galleryPage < galleryTotalPages - 1">
+        <span v-if="isLoading">加载中...</span>
       </div>
     </el-scrollbar>
     
@@ -223,9 +286,20 @@ onActivated(() => {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
+.author-name.clickable {
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.3s ease;
+}
+
+.author-name.clickable:hover {
+  color: #409eff;
+}
+
 .item-actions {
   display: flex;
   justify-content: center;
+  gap: 8px;
   margin-top: 4px;
 }
 
@@ -264,5 +338,56 @@ onActivated(() => {
   justify-content: center;
   align-items: center;
   height: calc(100vh - 100px); /* Adjust based on your layout */
+}
+
+/* 点赞按钮样式 */
+.like-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.3s ease;
+}
+
+.heart-icon {
+  font-size: 16px;
+  color: #ccc;
+  transition: all 0.3s ease;
+}
+
+.heart-icon.liked {
+  color: #e74c3c;
+  animation: pulse 0.6s ease-in-out;
+}
+
+.like-count {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 点赞动画 */
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.gallery-item {
+  animation: fadeIn 0.3s ease-in;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.gallery-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.load-more-sentinel {
+  text-align: center;
+  padding: 16px;
+  color: #999;
+  font-size: 14px;
 }
 </style>

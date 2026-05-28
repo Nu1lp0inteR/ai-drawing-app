@@ -14,6 +14,14 @@
             <div class="stat-number">{{ stats.totalArtworks }}</div>
             <div class="stat-label">总作品</div>
           </div>
+          <div class="stat-item clickable" @click="goToFollowingList">
+            <div class="stat-number">{{ stats.followingCount || 0 }}</div>
+            <div class="stat-label">关注</div>
+          </div>
+          <div class="stat-item clickable" @click="goToFollowersList">
+            <div class="stat-number">{{ stats.followersCount || 0 }}</div>
+            <div class="stat-label">粉丝</div>
+          </div>
           <div class="stat-item">
             <div class="stat-number">{{ formatDate(stats.lastActiveDate) }}</div>
             <div class="stat-label">最后活跃</div>
@@ -64,7 +72,7 @@
             <!-- 图片 -->
             <div class="artwork-image-container">
               <img 
-                :src="`http://localhost:8080/api/v1/images/${artwork.storedFilename}`" 
+                :src="artwork.imageUrl || `/api/v1/images/${artwork.storedFilename}`" 
                 :alt="artwork.prompt"
                 class="artwork-image"
                 @error="handleImageError"
@@ -141,7 +149,7 @@
 
 <script setup>
 import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
+import api from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   UserFilled, 
@@ -152,81 +160,88 @@ import {
   Delete 
 } from '@element-plus/icons-vue'
 import ArtworkDetailModal from '../components/ArtworkDetailModal.vue'
+import { getAllDrawings, deleteDrawing as deleteFromDB } from '../utils/indexedDB.js'
 
-// --- 依赖注入 ---
 const userInfo = inject('userInfo')
+const navigateToFollowingList = inject('navigateToFollowingList')
+const navigateToFollowersList = inject('navigateToFollowersList')
 
-// --- 状态管理 ---
 const loading = ref(false)
 const stats = ref(null)
 const artworkList = reactive({
   artworks: [],
   totalCount: 0,
-  currentPage: 0,
-  pageSize: 20,
-  totalPages: 0
 })
 
-// 分页参数
 const currentPage = ref(1)
 const pageSize = ref(20)
 
-// 作品详情弹窗
 const detailModalVisible = ref(false)
 const selectedArtwork = ref(null)
 
-// --- API请求函数 ---
-
-// 获取个人中心主页数据
-const fetchProfileHome = async () => {
+async function fetchProfileHome() {
   try {
-    const token = localStorage.getItem('accessToken')
-    if (!token) {
-      throw new Error('未登录')
+
+    // 从 IndexedDB 加载本地作品
+    const localDrawings = await getAllDrawings()
+    artworkList.artworks = localDrawings.map((d) => ({
+      id: d.id,
+      prompt: d.prompt || '',
+      negativePrompt: d.negativePrompt,
+      steps: d.steps,
+      cfg: d.cfg,
+      samplerName: d.samplerName,
+      seed: d.seed,
+      storedFilename: null,
+      imageUrl: d.imageUrl,
+      imageBase64: d.imageBase64,
+      sharedToGallery: false,
+      createdAt: d.createdAt,
+      isLocal: true,
+    }))
+    artworkList.totalCount = localDrawings.length
+
+    // 从后端获取统计数据（关注/粉丝数）
+    try {
+      const response = await api.get('/api/v1/profile/stats', {
+        
+      })
+      stats.value = response.data
+      stats.value.totalArtworks = localDrawings.length
+    } catch (statsErr) {
+      console.warn('⚠️ [Profile] 获取后端统计失败，使用本地数据:', statsErr)
     }
 
-    const response = await axios.get('http://localhost:8080/api/v1/profile/home', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-
-    stats.value = response.data.userStats
-    // 如果有最近作品，也显示在列表中
-    if (response.data.recentArtworks?.length > 0) {
-      artworkList.artworks = response.data.recentArtworks
-      artworkList.totalCount = response.data.userStats.totalArtworks
-    }
-
-    console.log('✅ [Profile] 个人中心数据加载成功')
+    console.log(`✅ [Profile] 从 IndexedDB 加载了 ${localDrawings.length} 张本地作品`)
   } catch (error) {
-    console.error('❌ [Profile] 获取个人中心数据失败:', error)
+    console.error('❌ [Profile] 获取数据失败:', error)
     handleAuthError(error)
   }
 }
 
-// 获取用户作品列表（分页）
-const fetchUserArtworks = async (page = 0, size = pageSize.value) => {
+async function fetchUserArtworks() {
   loading.value = true
   try {
-    const token = localStorage.getItem('accessToken')
-    if (!token) {
-      throw new Error('未登录')
-    }
-
-    const response = await axios.get('http://localhost:8080/api/v1/profile/artworks', {
-      params: { page, size },
-      headers: { Authorization: `Bearer ${token}` }
-    })
-
-    artworkList.artworks = response.data.artworks
-    artworkList.totalCount = response.data.totalCount
-    artworkList.currentPage = response.data.currentPage
-    artworkList.pageSize = response.data.pageSize
-    artworkList.totalPages = response.data.totalPages
-
-    console.log(`✅ [Profile] 作品列表加载成功: ${response.data.artworks.length} 张作品`)
+    const localDrawings = await getAllDrawings()
+    artworkList.artworks = localDrawings.map((d) => ({
+      id: d.id,
+      prompt: d.prompt || '',
+      negativePrompt: d.negativePrompt,
+      steps: d.steps,
+      cfg: d.cfg,
+      samplerName: d.samplerName,
+      seed: d.seed,
+      storedFilename: null,
+      imageUrl: d.imageUrl,
+      imageBase64: d.imageBase64,
+      sharedToGallery: false,
+      createdAt: d.createdAt,
+      isLocal: true,
+    }))
+    artworkList.totalCount = localDrawings.length
+    console.log(`✅ [Profile] 作品列表加载成功: ${localDrawings.length} 张作品`)
   } catch (error) {
     console.error('❌ [Profile] 获取作品列表失败:', error)
-    handleAuthError(error)
   } finally {
     loading.value = false
   }
@@ -245,24 +260,19 @@ const handleAuthError = (error) => {
   }
 }
 
-// --- 作品操作函数 ---
-
-// 刷新作品列表
 const refreshArtworks = () => {
-  fetchUserArtworks(currentPage.value - 1, pageSize.value)
+  fetchUserArtworks()
 }
 
-// 查看作品详情
 const viewArtworkDetail = (artwork) => {
   selectedArtwork.value = artwork
   detailModalVisible.value = true
 }
 
-// 确认删除作品
 const confirmDelete = async (artwork) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除作品"${artwork.prompt.substring(0, 30)}..."吗？`,
+      `确定要删除作品"${(artwork.prompt || '').substring(0, 30)}..."吗？`,
       '删除确认',
       {
         confirmButtonText: '删除',
@@ -270,7 +280,6 @@ const confirmDelete = async (artwork) => {
         type: 'warning',
       }
     )
-    
     await deleteArtwork(artwork)
   } catch (error) {
     if (error !== 'cancel') {
@@ -279,77 +288,86 @@ const confirmDelete = async (artwork) => {
   }
 }
 
-// 删除作品
 const deleteArtwork = async (artwork) => {
   try {
-    const token = localStorage.getItem('accessToken')
-    if (!token) {
-      throw new Error('未登录')
+    if (artwork.isLocal) {
+      await deleteFromDB(artwork.id)
+    } else {
+      await api.delete(`/api/v1/profile/artworks/${artwork.id}`, {
+        
+      })
     }
 
-    await axios.delete(`http://localhost:8080/api/v1/profile/artworks/${artwork.id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-
-    // 从本地列表中移除
     const index = artworkList.artworks.findIndex(item => item.id === artwork.id)
     if (index !== -1) {
       artworkList.artworks.splice(index, 1)
       artworkList.totalCount--
-      
-      // 更新统计信息
       if (stats.value) {
         stats.value.totalArtworks--
-        if (artwork.sharedToGallery) {
-          stats.value.sharedArtworks--
-        }
       }
     }
-    
+
     ElMessage.success('作品删除成功')
     console.log('✅ [Profile] 作品删除成功:', artwork.id)
-    
   } catch (error) {
     console.error('❌ [Profile] 删除作品失败:', error)
     handleAuthError(error)
   }
 }
 
-// 切换分享状态
 const toggleSharing = async (artwork) => {
   try {
-    const newStatus = !artwork.sharedToGallery
-    const token = localStorage.getItem('accessToken')
-    
-    await axios.put(
-      `http://localhost:8080/api/v1/profile/artworks/${artwork.id}/sharing`,
-      null,
-      {
-        params: { shareToGallery: newStatus },
-        headers: { Authorization: `Bearer ${token}` }
+    if (!artwork.imageBase64 && !artwork.imageUrl) {
+      ElMessage.warning('无法分享：图片数据不可用')
+      return
+    }
+
+
+    let imageBlob
+    if (artwork.imageBase64) {
+      const byteString = atob(artwork.imageBase64)
+      const ab = new ArrayBuffer(byteString.length)
+      const ia = new Uint8Array(ab)
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i)
       }
-    )
-    
-    artwork.sharedToGallery = newStatus
-    ElMessage.success(newStatus ? '作品已分享到画廊' : '已取消分享到画廊')
-    console.log('🔄 [Profile] 分享状态已更新:', artwork.id, '→', newStatus)
-    
+      imageBlob = new Blob([ab], { type: 'image/png' })
+    } else {
+      const response = await fetch(artwork.imageUrl)
+      imageBlob = await response.blob()
+    }
+
+    const formData = new FormData()
+    formData.append('image', imageBlob, 'artwork.png')
+    formData.append('params', JSON.stringify({
+      prompt: artwork.prompt,
+      negative_prompt: artwork.negativePrompt,
+      steps: artwork.steps,
+      cfg: artwork.cfg,
+      sampler_name: artwork.samplerName,
+      seed: artwork.seed,
+    }))
+
+    await api.post('/api/v1/ai-drawing/share', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+
+    artwork.sharedToGallery = true
+    ElMessage.success('作品已分享到画廊')
+    console.log('🔄 [Profile] 分享状态已更新:', artwork.id)
   } catch (error) {
     console.error('❌ [Profile] 切换分享状态失败:', error)
     handleAuthError(error)
   }
 }
 
-// --- 分页处理 ---
 const handleSizeChange = (newSize) => {
   pageSize.value = newSize
   currentPage.value = 1
-  fetchUserArtworks(0, newSize)
 }
 
 const handleCurrentChange = (newPage) => {
   currentPage.value = newPage
-  fetchUserArtworks(newPage - 1, pageSize.value)
 }
 
 // --- 工具函数 ---
@@ -385,19 +403,28 @@ const goToStudio = () => {
   window.dispatchEvent(new CustomEvent('switchToStudio'))
 }
 
+// 跳转到关注列表
+const goToFollowingList = () => {
+  if (navigateToFollowingList) {
+    navigateToFollowingList()
+  }
+}
+
+// 跳转到粉丝列表
+const goToFollowersList = () => {
+  if (navigateToFollowersList) {
+    navigateToFollowersList()
+  }
+}
+
 // --- 事件监听 ---
 
-// 监听新图片生成完成事件
-const handleNewDrawingEvent = (event) => {
-  console.log('🎨 [Profile] 监听到新图片生成事件，刷新个人中心数据')
-  // 延迟一点刷新，确保后端数据已保存
+const handleNewDrawingEvent = () => {
+  console.log('🎨 [Profile] 监听到新图片生成事件，刷新本地数据')
   setTimeout(() => {
+    fetchUserArtworks()
     fetchProfileHome()
-    if (currentPage.value === 1) {
-      // 如果在第一页，刷新作品列表
-      fetchUserArtworks(0, pageSize.value)
-    }
-  }, 1000)
+  }, 500)
 }
 
 // 监听用户登出事件，清理数据
@@ -416,15 +443,31 @@ const handleLogoutEvent = () => {
   selectedArtwork.value = null
 }
 
+// 监听关注状态变化事件，更新统计数据
+const handleFollowStatusChange = (event) => {
+  const { type, source } = event.detail
+  console.log(`📡 [Profile] 收到关注状态变化: ${type}, source: ${source}`)
+  
+  // 当前用户进行关注/取消关注操作时，更新自己的关注数
+  if (stats.value && (source === 'UserProfile' || source === 'FollowingList')) {
+    if (type === 'follow') {
+      stats.value.followingCount = (stats.value.followingCount || 0) + 1
+      console.log(`✅ [Profile] 关注数+1: ${stats.value.followingCount}`)
+    } else if (type === 'unfollow') {
+      stats.value.followingCount = Math.max(0, (stats.value.followingCount || 0) - 1)
+      console.log(`✅ [Profile] 关注数-1: ${stats.value.followingCount}`)
+    }
+  }
+}
+
 // --- 生命周期 ---
 onMounted(() => {
   console.log('🚀 [Profile] 组件开始挂载')
   
   // 检查用户是否已登录
-  const token = localStorage.getItem('accessToken')
   const userInfoData = localStorage.getItem('userInfo')
   
-  if (!token || !userInfoData) {
+  if (!userInfoData) {
     console.warn('⚠️ [Profile] 用户未登录，跳过数据加载')
     ElMessage.warning('请先登录')
     return
@@ -437,6 +480,7 @@ onMounted(() => {
     // 注册事件监听器
     window.addEventListener('drawingCompleted', handleNewDrawingEvent)
     window.addEventListener('userLogout', handleLogoutEvent)
+    window.addEventListener('followStatusChange', handleFollowStatusChange)
     
     console.log('✅ [Profile] 组件挂载完成')
   } catch (error) {
@@ -448,6 +492,7 @@ onUnmounted(() => {
   // 清理事件监听器
   window.removeEventListener('drawingCompleted', handleNewDrawingEvent)
   window.removeEventListener('userLogout', handleLogoutEvent)
+  window.removeEventListener('followStatusChange', handleFollowStatusChange)
 })
 </script>
 
@@ -494,6 +539,19 @@ onUnmounted(() => {
 
 .stat-item {
   text-align: center;
+}
+
+.stat-item.clickable {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.stat-item.clickable:hover {
+  background-color: #f0f9ff;
+  color: #409eff;
+  transform: translateY(-2px);
 }
 
 .stat-number {

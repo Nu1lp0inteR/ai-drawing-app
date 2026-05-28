@@ -51,7 +51,7 @@
             style="width: 100%;"
             :disabled="isLoading"
           >
-            {{ isLoading ? '生成中...' : '开始生成' }}
+            {{ isLoading ? progressStage || '生成中...' : '开始生成' }}
           </el-button>
           
           <!-- 取消按钮，仅在生成中显示 -->
@@ -70,7 +70,7 @@
     </el-aside>
     
     <el-main class="main-content">
-      <div class="image-container" v-loading="isLoading" element-loading-text="正在全力生成中...">
+      <div class="image-container" v-loading="isLoading" :element-loading-text="progressStage || '正在生成中...'">
         <div v-if="!imageUrl && !isLoading" class="placeholder">
           <el-icon :size="60"><IconPicture /></el-icon>
           <p>生成的图片将在这里显示</p>
@@ -209,44 +209,40 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject, watch, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, inject, watch, onMounted, onActivated, onUnmounted } from 'vue'
+import api from '@/api'
+import { ElMessage } from 'element-plus'
 import { MagicStick, Picture as IconPicture, Refresh, Promotion, Lock, Share, Download, Clock, View } from '@element-plus/icons-vue'
+import { addDrawing, getAllDrawings, deleteDrawing } from '../utils/indexedDB.js'
 
-// --- 依赖注入 ---
 const isLoggedIn = inject('isLoggedIn')
-const userInfo = inject('userInfo')
 const showAuthDialog = inject('showAuthDialog')
-const lastCompletedDrawing = inject('lastCompletedDrawing') // 注入最新完成的绘图数据
+const lastCompletedDrawing = inject('lastCompletedDrawing')
 
-// --- 状态管理 ---
 const params = reactive({
   prompt: '1girl, solo, masterpiece, best quality,  looking at viewer,white background, standing, long hair, purple hair,blue eyes,maid apron,maid',
   negative_prompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry',
   steps: 24,
   cfg: 6.0,
   sampler_name: 'euler_ancestral',
-  seed: String(Math.floor(Math.random() * 1000000000000000)), // Seed should be a string
+  seed: String(Math.floor(Math.random() * 1000000000000000)),
 })
 const imageUrl = ref(null)
 const isLoading = ref(false)
-const currentDrawingId = ref(null) // 存储当前生成图片的ID
+const progressStage = ref('')
+const currentImageBase64 = ref(null) // 当前展示图片的 base64 数据
+const currentDrawingParams = ref(null) // 当前展示图片的生成参数
 
-// --- 历史图片管理 ---
-const historyImages = ref([]) // 最近生成的图片历史 (最多12张)
-const HISTORY_STORAGE_KEY = 'ai_drawing_history'
+const historyImages = ref([])
 const MAX_HISTORY_COUNT = 12
-const isSharing = ref(false) // 分享状态
+const isSharing = ref(false)
 
-// --- 图片预览状态 ---
 const previewDialogVisible = ref(false)
 const previewImageUrl = ref('')
 const previewImageInfo = ref(null)
 
-// --- 超时机制 ---
 let drawingTimeoutId = null
-const DRAWING_TIMEOUT = 5 * 60 * 1000 // 5分钟超时
+const DRAWING_TIMEOUT = 5 * 60 * 1000
 
 // --- 简化的状态管理 ---
 
@@ -260,69 +256,67 @@ const samplerOptions = [
   { value: 'lms', label: 'lms' },
 ]
 
-// --- 监视器 ---
-// 修复版本：直接监视注入的 ref 对象，而不是其 .value 属性
 watch(lastCompletedDrawing, (newDrawing) => {
-  console.log('[Studio] Watch triggered with new value:', newDrawing);
-  console.log('[Studio] 🔍 newDrawing exists:', !!newDrawing);
-  if (newDrawing) {
-    console.log('[Studio] 🔍 storedFilename exists:', !!newDrawing.storedFilename);
-    console.log('[Studio] 🔍 storedFilename value:', newDrawing.storedFilename);
-    console.log('[Studio] 🔍 All keys in newDrawing:', Object.keys(newDrawing));
-  }
-  
-  if (newDrawing && (newDrawing.stored_filename || newDrawing.storedFilename)) {
-    console.log('[Studio] Detected new completed drawing via watcher:', newDrawing);
-    // 构建完整的图片URL - 兼容两种命名方式
-    const filename = newDrawing.stored_filename || newDrawing.storedFilename;
-    const newImageUrl = `http://localhost:8080/api/v1/images/${filename}`;
-    console.log('[Studio] 🖼️ Setting image URL to:', newImageUrl);
-    imageUrl.value = newImageUrl;
-    currentDrawingId.value = newDrawing.id; // 保存当前图片的ID
-    console.log('[Studio] 🖼️ imageUrl.value is now:', imageUrl.value);
-    console.log('[Studio] 📝 Drawing ID stored:', currentDrawingId.value);
-    
-    // 清除超时定时器
-    if (drawingTimeoutId) {
-      clearTimeout(drawingTimeoutId);
-      drawingTimeoutId = null;
+  console.log('[Studio] Watch triggered with new value:', newDrawing ? Object.keys(newDrawing).join(', ') : null)
+
+  if (newDrawing && (newDrawing.imageUrl || newDrawing.stored_filename || newDrawing.storedFilename)) {
+    console.log('[Studio] Detected new completed drawing via watcher:', newDrawing)
+
+    imageUrl.value = newDrawing.imageUrl
+      || (newDrawing.stored_filename || newDrawing.storedFilename
+        ? `http://localhost:8080/api/v1/images/${newDrawing.stored_filename || newDrawing.storedFilename}`
+        : null)
+
+    currentImageBase64.value = newDrawing.image_base64 || null
+    currentDrawingParams.value = {
+      prompt: newDrawing.prompt,
+      negative_prompt: newDrawing.negative_prompt || newDrawing.negativePrompt,
+      steps: newDrawing.steps,
+      cfg: newDrawing.cfg,
+      sampler_name: newDrawing.sampler_name || newDrawing.samplerName,
+      seed: newDrawing.seed,
     }
-    
-    // 添加到历史记录
-    addToHistory(newDrawing);
-    
-    isLoading.value = false; // 停止加载状态
-    ElMessage.success('图片生成成功！');
-  } else {
-    console.log('[Studio] ❌ Condition failed - newDrawing:', !!newDrawing, 'stored_filename:', newDrawing?.stored_filename, 'storedFilename:', newDrawing?.storedFilename);
+
+    if (drawingTimeoutId) {
+      clearTimeout(drawingTimeoutId)
+      drawingTimeoutId = null
+    }
+
+    addToHistory(newDrawing)
+    isLoading.value = false
+    progressStage.value = ''
+    ElMessage.success('图片生成成功！')
   }
-}, { deep: true, immediate: true }); // 添加 immediate: true 来立即执行一次检查
+}, { deep: true, immediate: true })
 
 // --- 函数 ---
-// 企业级参数复用功能 - 从localStorage获取并填充参数
 const loadParametersFromStorage = () => {
-  const storedParams = localStorage.getItem('autoFillParams');
-  if (storedParams) {
-    try {
-      const parsedParams = JSON.parse(storedParams);
-      console.log('[Studio] 📝 Loading parameters from storage:', parsedParams);
-      
-      // 映射参数名称（处理命名差异）
-      if (parsedParams.prompt) params.prompt = parsedParams.prompt;
-      if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt;
-      if (parsedParams.steps) params.steps = parsedParams.steps;
-      if (parsedParams.cfg) params.cfg = parsedParams.cfg;
-      if (parsedParams.samplerName) params.sampler_name = parsedParams.samplerName;
-      if (parsedParams.seed) params.seed = parsedParams.seed;
-      
-      // 清除localStorage中的参数，避免重复加载
-      localStorage.removeItem('autoFillParams');
-      
-      ElMessage.success('参数已自动填充，您可以直接生成或修改后再生成');
-    } catch (error) {
-      console.error('[Studio] Failed to parse stored parameters:', error);
-      localStorage.removeItem('autoFillParams');
-    }
+  let storedParams = sessionStorage.getItem('prefillStudioParams');
+  if (!storedParams) storedParams = localStorage.getItem('autoFillParams');
+  if (!storedParams) return;
+
+  try {
+    const parsedParams = JSON.parse(storedParams);
+    console.log('[Studio] 📝 Loading parameters from storage:', parsedParams);
+    
+    if (parsedParams.prompt) params.prompt = parsedParams.prompt;
+    if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt;
+    if (parsedParams.negative_prompt) params.negative_prompt = parsedParams.negative_prompt;
+    if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt;
+    if (parsedParams.steps) params.steps = parsedParams.steps;
+    if (parsedParams.cfg) params.cfg = parsedParams.cfg;
+    if (parsedParams.samplerName) params.sampler_name = parsedParams.samplerName;
+    if (parsedParams.sampler_name) params.sampler_name = parsedParams.sampler_name;
+    if (parsedParams.seed) params.seed = parsedParams.seed;
+    
+    sessionStorage.removeItem('prefillStudioParams');
+    localStorage.removeItem('autoFillParams');
+    
+    ElMessage.success('参数已自动填充');
+  } catch (error) {
+    console.error('[Studio] Failed to parse stored parameters:', error);
+    sessionStorage.removeItem('prefillStudioParams');
+    localStorage.removeItem('autoFillParams');
   }
 };
 
@@ -349,6 +343,7 @@ const handleDrawingFailedEvent = (event) => {
   
   // 重置加载状态
   isLoading.value = false;
+  progressStage.value = '';
   
   // 显示具体错误信息
   ElMessage.error(event.detail.error || '生图失败，请稍后重试');
@@ -362,6 +357,7 @@ const handleDrawingTimeout = () => {
   
   // 重置状态
   isLoading.value = false;
+  progressStage.value = '';
   drawingTimeoutId = null;
   
   // 显示温和的超时提示
@@ -382,6 +378,7 @@ const cancelDrawing = () => {
   
   // 重置状态
   isLoading.value = false;
+  progressStage.value = '';
   
   // 显示取消提示
   ElMessage({
@@ -395,18 +392,18 @@ const cancelDrawing = () => {
 
 
 
-// 生命周期钩子
 onMounted(() => {
-  loadParametersFromStorage(); // 组件挂载时检查一次
-  loadHistoryFromStorage(); // 加载历史图片记录
-  
-  // 监听来自App.vue的参数加载事件
-  window.addEventListener('loadAutoFillParams', handleLoadAutoFillParams);
-  // 监听清空历史记录事件
-  window.addEventListener('clearHistory', handleClearHistoryEvent);
-  // 监听绘图失败事件
-  window.addEventListener('drawingFailed', handleDrawingFailedEvent);
-});
+  loadParametersFromStorage()
+  loadHistoryFromIndexedDB()
+
+  window.addEventListener('loadAutoFillParams', handleLoadAutoFillParams)
+  window.addEventListener('clearHistory', handleClearHistoryEvent)
+  window.addEventListener('drawingFailed', handleDrawingFailedEvent)
+})
+
+onActivated(() => {
+  loadParametersFromStorage()
+})
 
 // 清理事件监听器
 onUnmounted(() => {
@@ -415,145 +412,155 @@ onUnmounted(() => {
   window.removeEventListener('drawingFailed', handleDrawingFailedEvent);
 });
 
-// 分享到画廊功能 - 企业级用户体验设计
-const shareToGallery = async () => {
-  if (!currentDrawingId.value) {
-    ElMessage.warning('请先生成一张图片再分享');
-    return;
+async function shareToGallery() {
+  if (!currentImageBase64.value && !imageUrl.value) {
+    ElMessage.warning('请先生成一张图片再分享')
+    return
   }
 
   if (!isLoggedIn.value) {
-    ElMessage.warning('请先登录再分享作品');
-    showAuthDialog();
-    return;
+    ElMessage.warning('请先登录再分享作品')
+    showAuthDialog()
+    return
   }
 
   try {
-    isSharing.value = true;
-    
-    // 获取认证token
-    const token = localStorage.getItem('accessToken')
-    const headers = token ? { Authorization: `Bearer ${token}` } : {}
-    
-    const response = await axios.post(
-      `http://localhost:8080/api/v1/ai-drawing/${currentDrawingId.value}/share`,
-      {},
-      { headers }
-    );
-    
+    isSharing.value = true
+
+    // 将 base64 转为 Blob
+    let imageBlob
+    if (currentImageBase64.value) {
+      const byteString = atob(currentImageBase64.value)
+      const ab = new ArrayBuffer(byteString.length)
+      const ia = new Uint8Array(ab)
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i)
+      }
+      imageBlob = new Blob([ab], { type: 'image/png' })
+    } else {
+      const response = await fetch(imageUrl.value)
+      imageBlob = await response.blob()
+    }
+
+    const formData = new FormData()
+    formData.append('image', imageBlob, 'artwork.png')
+    formData.append('params', JSON.stringify(currentDrawingParams.value || {
+      prompt: params.prompt,
+      negative_prompt: params.negative_prompt,
+      steps: params.steps,
+      cfg: params.cfg,
+      sampler_name: params.sampler_name,
+      seed: params.seed,
+    }))
+
+    const response = await api.post(
+      '/api/v1/ai-drawing/share',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    )
+
     if (response.status === 200) {
-      ElMessage.success('作品已成功分享到画廊！🎉');
+      ElMessage.success('作品已成功分享到画廊！')
     }
   } catch (error) {
-    console.error('分享到画廊失败:', error);
-    
-    // 检查是否是JWT过期或认证失败
-    if (error.response?.status === 403 || error.response?.status === 401) {
-      console.warn('⚠️ [Studio] 分享时认证失败，可能token已过期');
-      ElMessage.warning('登录已过期，请重新登录');
-      // 触发父组件的登出逻辑
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('userInfo');
-      window.location.reload(); // 刷新页面以重置状态
-      return;
-    }
-    
-    if (error.response?.status === 404) {
-      ElMessage.error('作品不存在，无法分享');
-    } else {
-      ElMessage.error('分享失败，请稍后重试');
-    }
-  } finally {
-    isSharing.value = false;
-  }
-};
+    console.error('分享到画廊失败:', error)
 
-// 下载图片功能
+    if (error.response?.status === 403 || error.response?.status === 401) {
+      ElMessage.warning('登录已过期，请重新登录')
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      localStorage.removeItem('userInfo')
+      window.location.reload()
+      return
+    }
+
+    ElMessage.error(error.response?.data?.message || '分享失败，请稍后重试')
+  } finally {
+    isSharing.value = false
+  }
+}
+
 const downloadImage = () => {
   if (!imageUrl.value) {
-    ElMessage.warning('没有可下载的图片');
-    return;
+    ElMessage.warning('没有可下载的图片')
+    return
   }
 
-  // 创建一个临时的a标签来触发下载
-  const link = document.createElement('a');
-  link.href = imageUrl.value;
-  link.download = `ai-artwork-${Date.now()}.png`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  
-  ElMessage.success('图片下载已开始');
-};
+  const link = document.createElement('a')
+  link.href = imageUrl.value
+  link.download = `ai-artwork-${Date.now()}.png`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+
+  ElMessage.success('图片下载已开始')
+}
 
 const handleRandomSeed = () => {
   params.seed = String(Math.floor(Math.random() * 1000000000000000))
   console.log('🎲 [Studio] Generated new random seed:', params.seed)
 }
 
-// --- 历史图片管理函数 ---
-
-// 从localStorage加载历史图片
-const loadHistoryFromStorage = () => {
+async function loadHistoryFromIndexedDB() {
   try {
-    const stored = localStorage.getItem(HISTORY_STORAGE_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored)
-      // 确保数据格式正确且不超过最大数量
-      historyImages.value = Array.isArray(parsed) ? parsed.slice(0, MAX_HISTORY_COUNT) : []
-      console.log(`📚 [Studio] 从本地存储加载了 ${historyImages.value.length} 张历史图片`)
-    }
+    const drawings = await getAllDrawings()
+    historyImages.value = drawings.slice(0, MAX_HISTORY_COUNT)
+    console.log(`📚 [Studio] 从 IndexedDB 加载了 ${historyImages.value.length} 张历史图片`)
   } catch (error) {
-    console.error('❌ [Studio] 加载历史图片失败:', error)
+    console.error('❌ [Studio] 加载 IndexedDB 历史失败:', error)
     historyImages.value = []
   }
 }
 
-// 保存历史图片到localStorage
-const saveHistoryToStorage = () => {
-  try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyImages.value))
-  } catch (error) {
-    console.error('❌ [Studio] 保存历史图片失败:', error)
-  }
-}
+async function addToHistory(drawingData) {
+  const imageUrl = drawingData.imageUrl
+    || (drawingData.stored_filename || drawingData.storedFilename
+      ? `http://localhost:8080/api/v1/images/${drawingData.stored_filename || drawingData.storedFilename}`
+      : null)
 
-// 添加新图片到历史记录
-const addToHistory = (drawingData) => {
   const historyItem = {
-    id: drawingData.id,
-    imageUrl: `http://localhost:8080/api/v1/images/${drawingData.storedFilename || drawingData.stored_filename}`,
+    imageUrl: imageUrl,
+    imageBase64: drawingData.image_base64 || null,
     prompt: drawingData.prompt,
     negativePrompt: drawingData.negativePrompt || drawingData.negative_prompt,
     steps: drawingData.steps,
     cfg: drawingData.cfg,
     samplerName: drawingData.samplerName || drawingData.sampler_name,
     seed: drawingData.seed,
-    createdAt: new Date().toISOString()
+    createdAt: drawingData.timestamp || new Date().toISOString(),
   }
-  
-  // 添加到数组开头（最新的在前面）
-  historyImages.value.unshift(historyItem)
-  
-  // 保持最大数量限制
-  if (historyImages.value.length > MAX_HISTORY_COUNT) {
-    historyImages.value = historyImages.value.slice(0, MAX_HISTORY_COUNT)
+
+  try {
+    const id = await addDrawing(historyItem)
+    historyItem.id = id
+    historyImages.value.unshift(historyItem)
+
+    if (historyImages.value.length > MAX_HISTORY_COUNT) {
+      const removed = historyImages.value.splice(MAX_HISTORY_COUNT)
+      for (const item of removed) {
+        if (item.id) await deleteDrawing(item.id)
+      }
+    }
+    console.log(`📸 [Studio] 添加新图片到 IndexedDB，当前总数: ${historyImages.value.length}`)
+  } catch (error) {
+    console.error('❌ [Studio] 保存到 IndexedDB 失败:', error)
   }
-  
-  saveHistoryToStorage()
-  console.log(`📸 [Studio] 添加新图片到历史记录，当前总数: ${historyImages.value.length}`)
 }
 
-// 清空历史记录
-const clearHistory = () => {
-  historyImages.value = []
-  localStorage.removeItem(HISTORY_STORAGE_KEY)
-  ElMessage.success('历史记录已清空')
-  console.log('🗑️ [Studio] 历史记录已清空')
+async function clearHistory() {
+  try {
+    const allDrawings = await getAllDrawings()
+    for (const d of allDrawings) {
+      await deleteDrawing(d.id)
+    }
+    historyImages.value = []
+    ElMessage.success('历史记录已清空')
+    console.log('🗑️ [Studio] 历史记录已清空')
+  } catch (error) {
+    console.error('❌ [Studio] 清空历史失败:', error)
+  }
 }
 
-// 从历史记录加载参数到当前表单
 const loadHistoryItem = (item) => {
   params.prompt = item.prompt
   params.negative_prompt = item.negativePrompt
@@ -561,27 +568,37 @@ const loadHistoryItem = (item) => {
   params.cfg = item.cfg
   params.sampler_name = item.samplerName
   params.seed = item.seed
-  
+
+  imageUrl.value = item.imageUrl
+  currentImageBase64.value = item.imageBase64 || null
+  currentDrawingParams.value = {
+    prompt: item.prompt,
+    negative_prompt: item.negativePrompt,
+    steps: item.steps,
+    cfg: item.cfg,
+    sampler_name: item.samplerName,
+    seed: item.seed,
+  }
+
   ElMessage.success('已加载历史参数')
-  console.log('🔄 [Studio] 从历史记录加载参数:', item.prompt.substring(0, 50) + '...')
+  console.log('🔄 [Studio] 从历史记录加载参数:', item.prompt?.substring(0, 50) + '...')
 }
 
-// 预览历史图片
 const previewHistoryImage = (item, event) => {
-  event.stopPropagation() // 阻止触发loadHistoryItem
+  event.stopPropagation()
   previewImageUrl.value = item.imageUrl
   previewImageInfo.value = item
   previewDialogVisible.value = true
   console.log('👁️ [Studio] 预览历史图片:', item.id)
 }
 
-// 格式化时间显示
 const formatTime = (isoString) => {
+  if (!isoString) return ''
   const date = new Date(isoString)
   const now = new Date()
   const diffMs = now - date
   const diffMins = Math.floor(diffMs / 60000)
-  
+
   if (diffMins < 1) return '刚刚'
   if (diffMins < 60) return `${diffMins}分钟前`
   if (diffMins < 1440) return `${Math.floor(diffMins / 60)}小时前`
@@ -595,27 +612,19 @@ const handleSubmit = async () => {
     return
   }
 
-  // 每次生图自动更新seed，确保图片唯一性
   params.seed = String(Math.floor(Math.random() * 1000000000000000));
-  console.log('🎲 [Studio] 自动生成新seed确保唯一性:', params.seed);
 
   isLoading.value = true
-  imageUrl.value = null // 开始生成时，清空旧图片
+  progressStage.value = '正在提交任务...'
+  imageUrl.value = null
 
-  // 设置超时定时器
   drawingTimeoutId = setTimeout(handleDrawingTimeout, DRAWING_TIMEOUT)
 
   try {
-    const backendUrl = 'http://localhost:8080/api/v1/ai-drawing/generate'
-    
-    // 获取认证token
-    const token = localStorage.getItem('accessToken')
-    const headers = token ? { Authorization: `Bearer ${token}` } : {}
-    
-    const response = await axios.post(backendUrl, params, { headers })
+    const response = await api.post('/api/v1/ai-drawing/generate', params)
 
     if (response.data.status === 'QUEUED') {
-        ElMessage.info('任务已成功进入队列，请等待生成完成...')
+        progressStage.value = '任务已进入队列，ComfyUI 正在生成...'
         console.log('⏰ [Studio] 已设置5分钟超时保护')
     } else {
         throw new Error(response.data.message || '提交任务失败')

@@ -3,7 +3,7 @@
 <script setup>
 import { ref, defineEmits, defineProps } from 'vue';
 import { ElMessage } from 'element-plus';
-import axios from 'axios';
+import api from '@/api';
 
 // --- Props & Emits ---
 const props = defineProps({
@@ -69,9 +69,6 @@ const registerRules = {
   ]
 };
 
-// --- API 基础配置 ---
-const API_BASE = 'http://localhost:8080/api/v1/auth';
-
 // --- 登录函数 ---
 const handleLogin = async () => {
   if (!loginForm.value.usernameOrEmail || !loginForm.value.password) {
@@ -84,7 +81,7 @@ const handleLogin = async () => {
   try {
     console.log('🔐 [Auth] 发送登录请求:', loginForm.value.usernameOrEmail);
     
-    const response = await axios.post(`${API_BASE}/login`, {
+    const response = await api.post('/api/v1/auth/login', {
       usernameOrEmail: loginForm.value.usernameOrEmail,
       password: loginForm.value.password
     });
@@ -133,7 +130,7 @@ const handleRegister = async () => {
   try {
     console.log('📝 [Auth] 发送注册请求:', registerForm.value.username, registerForm.value.email);
     
-    const response = await axios.post(`${API_BASE}/register`, {
+    const response = await api.post('/api/v1/auth/register', {
       username: registerForm.value.username,
       email: registerForm.value.email,
       password: registerForm.value.password

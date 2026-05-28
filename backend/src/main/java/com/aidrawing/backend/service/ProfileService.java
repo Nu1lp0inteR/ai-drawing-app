@@ -7,6 +7,7 @@ import com.aidrawing.backend.repository.DrawingRepository;
 import com.aidrawing.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +29,7 @@ public class ProfileService {
 
     private final DrawingRepository drawingRepository;
     private final UserRepository userRepository;
+    private final FollowService followService;
 
     /**
      * 获取用户的作品列表（分页）
@@ -88,10 +90,17 @@ public class ProfileService {
             LocalDateTime lastActiveDate = drawingRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
                 .map(Drawing::getCreatedAt)
                 .orElse(user.getCreatedAt());
+                
+            // 获取关注和粉丝统计
+            Long[] followCounts = followService.getFollowCounts(userId);
+            Long followingCount = followCounts[0];
+            Long followersCount = followCounts[1];
             
             ProfileDto.UserStats stats = new ProfileDto.UserStats(
                 totalArtworks,
                 sharedArtworks,
+                followingCount,
+                followersCount,
                 user.getCreatedAt(),
                 lastActiveDate
             );
@@ -161,6 +170,7 @@ public class ProfileService {
     /**
      * 切换作品分享状态
      */
+    @CacheEvict(value = "galleryCache", allEntries = true)
     public void toggleArtworkSharing(String userId, String drawingId, boolean shareToGallery) {
         log.info("🔄 切换作品分享状态: userId={}, drawingId={}, shareToGallery={}", 
             userId, drawingId, shareToGallery);

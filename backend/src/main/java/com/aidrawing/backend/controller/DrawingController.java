@@ -1,23 +1,31 @@
-// 文件路径: src/main/java/com/aidrawing/backend/controller/DrawingController.java
-
 package com.aidrawing.backend.controller;
 
 import com.aidrawing.backend.dto.DrawingRequest;
 import com.aidrawing.backend.entity.Drawing;
+import com.aidrawing.backend.entity.User;
 import com.aidrawing.backend.repository.DrawingRepository;
+import com.aidrawing.backend.repository.UserRepository;
 import com.aidrawing.backend.service.DrawingTaskService;
 import com.aidrawing.backend.service.GalleryService;
 import com.aidrawing.backend.service.JwtService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.multipart.MultipartFile;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/ai-drawing")
@@ -25,32 +33,34 @@ public class DrawingController {
 
     private static final Logger logger = LoggerFactory.getLogger(DrawingController.class);
 
+    @Value("${file.storage.path}")
+    private String storagePath;
+
     private final DrawingTaskService drawingTaskService;
     private final GalleryService galleryService;
     private final DrawingRepository drawingRepository;
+    private final UserRepository userRepository;
     private final JwtService jwtService;
+    private final ObjectMapper objectMapper;
 
     @Autowired
-    public DrawingController(DrawingTaskService drawingTaskService, GalleryService galleryService, DrawingRepository drawingRepository, JwtService jwtService) {
+    public DrawingController(DrawingTaskService drawingTaskService, GalleryService galleryService,
+                             DrawingRepository drawingRepository, UserRepository userRepository,
+                             JwtService jwtService, ObjectMapper objectMapper) {
         this.drawingTaskService = drawingTaskService;
         this.galleryService = galleryService;
         this.drawingRepository = drawingRepository;
+        this.userRepository = userRepository;
         this.jwtService = jwtService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping("/generate")
-    public ResponseEntity<?> generateImage(@RequestBody DrawingRequest request, HttpServletRequest httpRequest) {
-        // 从JWT中提取用户ID
-        String authHeader = httpRequest.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            try {
-                String userId = jwtService.extractUserId(token);
-                request.setUserId(userId); // 设置用户ID到请求中
-                logger.info("🔑 [DrawingController] 为生图任务设置用户ID: {}", userId);
-            } catch (Exception e) {
-                logger.warn("⚠️ [DrawingController] 无法从JWT提取用户ID: {}", e.getMessage());
-            }
+    public ResponseEntity<?> generateImage(@RequestBody DrawingRequest request) {
+        String userId = jwtService.getCurrentUserId();
+        if (userId != null) {
+            request.setUserId(userId);
+            logger.info("🔑 [DrawingController] 为生图任务设置用户ID: {}", userId);
         }
         
         drawingTaskService.sendDrawingTask(request);
@@ -81,6 +91,62 @@ public class DrawingController {
             return ResponseEntity.ok(List.of());
         }
     }
+
+    /**
+     * 分享作品到画廊：接收图片文件和参数，保存到服务器并写入数据库。
+     * 仅当用户主动分享时才会存储图片和记录。
+     */
+    @PostMapping("/share")
+    public ResponseEntity<?> shareToGallery(
+            @RequestParam("image") MultipartFile imageFile,
+            @RequestParam("params") String paramsJson) {
+
+        String userId = jwtService.getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "请先登录"));
+        }
+
+        try {
+            DrawingRequest params = objectMapper.readValue(paramsJson, DrawingRequest.class);
+
+            String filename = UUID.randomUUID().toString() + ".png";
+            Path storageDir = Paths.get(storagePath);
+            Files.createDirectories(storageDir);
+            imageFile.transferTo(storageDir.resolve(filename));
+            logger.info("Image saved to storage: {}", filename);
+
+            Drawing drawing = new Drawing();
+            drawing.setPrompt(params.getPrompt());
+            drawing.setNegativePrompt(params.getNegativePrompt());
+            drawing.setSteps(params.getSteps());
+            drawing.setCfg(params.getCfg());
+            drawing.setSamplerName(params.getSamplerName());
+            drawing.setSeed(params.getSeed());
+            drawing.setStoredFilename(filename);
+            drawing.setOriginalFilename(imageFile.getOriginalFilename());
+            drawing.setFileType(imageFile.getContentType());
+            drawing.setSharedToGallery(true);
+
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("用户不存在: " + userId));
+            drawing.setUser(user);
+
+            Drawing savedDrawing = drawingRepository.save(drawing);
+            logger.info("Drawing shared to gallery: id={}, userId={}", savedDrawing.getId(), userId);
+
+            Map<String, Object> result = new java.util.HashMap<>();
+            result.put("message", "作品已成功分享到画廊");
+            result.put("drawing_id", savedDrawing.getId());
+            result.put("stored_filename", savedDrawing.getStoredFilename());
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            logger.error("Error sharing drawing to gallery:", e);
+            return ResponseEntity.internalServerError()
+                .body(Map.of("message", "分享失败: " + e.getMessage()));
+        }
+    }
+
 
     /**
      * New endpoint to share a drawing to the public gallery.
@@ -119,6 +185,43 @@ public class DrawingController {
         } else {
             return ResponseEntity.status(404).body(Map.of("message", "Drawing not found with ID: " + drawingId));
         }
+    }
+
+    @GetMapping("/my-history")
+    public ResponseEntity<?> getMyHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        String userId = jwtService.getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "请先登录"));
+        }
+
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Drawing> drawingPage = drawingRepository.findByUserId(userId, pageRequest);
+
+        List<Map<String, Object>> content = drawingPage.getContent().stream().map(d -> {
+            Map<String, Object> item = new java.util.LinkedHashMap<>();
+            item.put("id", d.getId());
+            item.put("prompt", d.getPrompt());
+            item.put("negative_prompt", d.getNegativePrompt());
+            item.put("steps", d.getSteps());
+            item.put("cfg", d.getCfg());
+            item.put("sampler_name", d.getSamplerName());
+            item.put("seed", d.getSeed());
+            item.put("stored_filename", d.getStoredFilename());
+            item.put("shared_to_gallery", d.isSharedToGallery());
+            item.put("created_at", d.getCreatedAt().toString());
+            return item;
+        }).toList();
+
+        return ResponseEntity.ok(Map.of(
+            "content", content,
+            "page", page,
+            "size", size,
+            "totalElements", drawingPage.getTotalElements(),
+            "totalPages", drawingPage.getTotalPages()
+        ));
     }
 
     /**

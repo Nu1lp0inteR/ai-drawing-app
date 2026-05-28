@@ -47,6 +47,13 @@ public class GalleryItemDto {
     
     @JsonProperty("authorId") 
     private String authorId;
+    
+    // 点赞信息
+    @JsonProperty("likesCount")
+    private Long likesCount;
+    
+    @JsonProperty("isLiked")
+    private Boolean isLiked;
 
     // 默认构造函数
     public GalleryItemDto() {}
@@ -169,5 +176,21 @@ public class GalleryItemDto {
 
     public void setAuthorId(String authorId) {
         this.authorId = authorId;
+    }
+
+    public Long getLikesCount() {
+        return likesCount;
+    }
+
+    public void setLikesCount(Long likesCount) {
+        this.likesCount = likesCount;
+    }
+
+    public Boolean getIsLiked() {
+        return isLiked;
+    }
+
+    public void setIsLiked(Boolean isLiked) {
+        this.isLiked = isLiked;
     }
 }

@@ -1,20 +1,29 @@
-// 文件路径: src/main/java/com/aidrawing/backend/dto/DrawingRequest.java
-
 package com.aidrawing.backend.dto;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 
 public class DrawingRequest {
 
+    @NotBlank(message = "提示词不能为空")
     private String prompt;
+
     private String negativePrompt;
+
+    @Min(value = 1, message = "采样步数不能小于1")
+    @Max(value = 100, message = "采样步数不能大于100")
     private Integer steps;
+
+    @Min(value = 1, message = "CFG值不能小于1")
+    @Max(value = 20, message = "CFG值不能大于20")
     private Double cfg;
+
     private String samplerName;
-    // We change the type to String to perfectly match the Drawing entity.
-    // This provides more flexibility and prevents type mismatch errors.
-    // 我们将类型更改为String，以与Drawing实体完美匹配。
-    // 这提供了更大的灵活性，并防止了类型不匹配的错误。
+
     private String seed;
-    private String userId; // 用户ID，用于关联图片到用户
+
+    private String userId;
 
     // Getters and Setters
     public String getPrompt() {

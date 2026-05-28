@@ -10,7 +10,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import api from '@/api'
 
 // Props定义 - 支持灵活的使用方式
 const props = defineProps({
@@ -38,7 +38,6 @@ const emit = defineEmits(['update:visible', 'copy-params'])
 const loading = ref(false)
 const artworkData = ref(null)
 const imageLoading = ref(true)
-const backendBaseUrl = 'http://localhost:8080'
 
 // 计算属性
 const dialogVisible = computed({
@@ -49,7 +48,7 @@ const dialogVisible = computed({
 // 获取图片URL
 const getImageUrl = (filename) => {
   if (!filename) return ''
-  return `${backendBaseUrl}/api/v1/images/${filename}`
+  return `/api/v1/images/${filename}`
 }
 
 // 获取作品详情 - 企业级错误处理和用户体验
@@ -58,7 +57,7 @@ const fetchArtworkDetails = async (id) => {
   
   try {
     loading.value = true
-    const response = await axios.get(`${backendBaseUrl}/api/v1/ai-drawing/${id}`)
+    const response = await api.get(`/api/v1/ai-drawing/${id}`)
     artworkData.value = response.data
   } catch (error) {
     console.error('Failed to fetch artwork details:', error)
@@ -91,6 +90,29 @@ const copyParameters = () => {
   emit('copy-params', params)
   ElMessage.success('参数已复制！即将跳转到创作中心')
   dialogVisible.value = false
+}
+
+function downloadImage() {
+  if (!artworkData.value?.storedFilename) {
+    ElMessage.warning('没有可下载的图片');
+    return;
+  }
+  const link = document.createElement('a');
+  link.href = getImageUrl(artworkData.value.storedFilename);
+  link.download = artworkData.value.storedFilename;
+  link.click();
+}
+
+function copyPromptText() {
+  if (!artworkData.value?.prompt) {
+    ElMessage.warning('没有可复制的提示词');
+    return;
+  }
+  navigator.clipboard.writeText(artworkData.value.prompt).then(() => {
+    ElMessage.success('提示词已复制到剪贴板');
+  }).catch(() => {
+    ElMessage.error('复制失败');
+  });
 }
 
 // 格式化时间显示
@@ -256,8 +278,13 @@ const handleImageError = () => {
     <template #footer>
       <div class="dialog-footer">
         <el-button @click="dialogVisible = false">关闭</el-button>
+        <el-button @click="downloadImage">
+          下载原图
+        </el-button>
+        <el-button @click="copyPromptText">
+          复制提示词
+        </el-button>
         <el-button type="primary" @click="copyParameters">
-          <el-icon><CopyDocument /></el-icon>
           复用参数到创作中心
         </el-button>
       </div>

@@ -99,7 +99,7 @@ public class EnterpriseGalleryService {
      * - ✅ 详细的业务验证
      */
     @Transactional
-    @CacheEvict(value = "galleryCache", key = "'publicGallery'")
+    @CacheEvict(value = "galleryCache", allEntries = true)
     public Optional<Drawing> shareDrawingToGallery(String drawingId) {
         logger.info("🎨 开始分享作品到画廊: {}", drawingId);
         

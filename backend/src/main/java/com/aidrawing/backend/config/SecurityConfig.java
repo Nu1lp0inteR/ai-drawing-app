@@ -82,6 +82,11 @@ public class SecurityConfig {
                     "/api/v1/hybrid/**",         // 混合画廊API (暂时公开)
                     "/api/v1/enterprise/gallery/public", // 企业级公共画廊
                     "/api/v1/enterprise/gallery/health", // 健康检查
+                    "/api/v1/users/*/profile",   // 用户公开个人主页
+                    "/api/v1/users/*/artworks",  // 用户公开作品列表
+                    "/api/v1/follows/users/*/following", // 公开查看用户关注列表
+                    "/api/v1/follows/users/*/followers", // 公开查看用户粉丝列表
+                    "/api/v1/follows/*/status",          // 公开查看关注状态
                     "/api/v1/images/**",         // 图片访问
                     "/ws/**",                    // WebSocket连接 - 修正路径
                     "/error"                     // 错误页面
@@ -90,10 +95,16 @@ public class SecurityConfig {
                 // 受保护端点 - 需要认证
                 // Protected endpoints - authentication required
                 .requestMatchers(
-                    "/api/v1/ai-drawing/generate",     // AI图片生成
-                    "/api/v1/ai-drawing/*/share",      // 分享到画廊
-                    "/api/v1/user/**",                 // 用户相关API
-                    "/api/v1/profile/**"               // 用户档案API
+                    "/api/v1/ai-drawing/generate",           // AI图片生成
+                    "/api/v1/ai-drawing/share",              // 分享到画廊 (multipart)
+                    "/api/v1/ai-drawing/*/share",            // 分享到画廊 (by ID)
+                    "/api/v1/ai-drawing/*/unshare",          // 取消分享
+                    "/api/v1/drawings/*",                    // 作品详情/删除 (需认证)
+                    "/api/v1/user/**",                       // 用户相关API
+                    "/api/v1/profile/**",                    // 用户档案API
+                    "/api/v1/follows/current-user/**",      // 当前用户的关注/粉丝列表
+                    "/api/v1/follows/*",                     // 关注/取消关注操作
+                    "/api/v1/likes/**"                       // 点赞相关API
                 ).authenticated()
                 
                 // 其他所有请求默认需要认证

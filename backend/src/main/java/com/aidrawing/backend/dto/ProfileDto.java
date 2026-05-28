@@ -88,6 +88,12 @@ public class ProfileDto {
         @JsonProperty("sharedArtworks")
         private Long sharedArtworks;
         
+        @JsonProperty("followingCount")
+        private Long followingCount;
+        
+        @JsonProperty("followersCount")
+        private Long followersCount;
+        
         @JsonProperty("joinDate")
         private LocalDateTime joinDate;
         

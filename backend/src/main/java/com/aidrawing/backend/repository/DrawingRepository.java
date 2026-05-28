@@ -34,6 +34,12 @@ public interface DrawingRepository extends JpaRepository<Drawing, String> {
     @Query("SELECT d FROM Drawing d LEFT JOIN FETCH d.user WHERE d.sharedToGallery = true ORDER BY d.createdAt DESC")
     List<Drawing> findBySharedToGalleryTrueWithUserOrderByCreatedAtDesc();
 
+    @Query(value = "SELECT d FROM Drawing d LEFT JOIN FETCH d.user WHERE d.sharedToGallery = true ORDER BY d.createdAt DESC",
+           countQuery = "SELECT COUNT(d) FROM Drawing d WHERE d.sharedToGallery = true")
+    Page<Drawing> findBySharedToGalleryTrueWithUserOrderByCreatedAtDesc(Pageable pageable);
+
+    Long countBySharedToGalleryTrue();
+
     // --- 个人中心相关查询方法 ---
 
     /**
@@ -60,5 +66,10 @@ public interface DrawingRepository extends JpaRepository<Drawing, String> {
      * 获取指定用户最近的N张作品
      */
     List<Drawing> findTop10ByUserIdOrderByCreatedAtDesc(String userId);
+
+    /**
+     * 分页查询指定用户的公开作品（已分享到画廊的作品）
+     */
+    Page<Drawing> findByUserIdAndSharedToGalleryOrderByCreatedAtDesc(String userId, Boolean sharedToGallery, Pageable pageable);
 }
 

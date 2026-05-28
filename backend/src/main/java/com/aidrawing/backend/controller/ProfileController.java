@@ -9,8 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
-
 /**
  * 个人中心控制器
  * 提供用户作品管理、统计信息等API
@@ -24,30 +22,13 @@ public class ProfileController {
     private final ProfileService profileService;
     private final JwtService jwtService;
 
-    /**
-     * 从HTTP请求中提取用户ID
-     */
-    private String extractUserIdFromRequest(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String jwt = authHeader.substring(7);
-            return jwtService.extractUserId(jwt);
-        }
-        return null;
-    }
-
-    /**
-     * 获取个人中心主页数据
-     * 包含用户统计信息和最近作品
-     */
     @GetMapping("/home")
     public ResponseEntity<ProfileDto.ProfileHomeData> getProfileHome(
-            Authentication authentication, 
-            HttpServletRequest request) {
+            Authentication authentication) {
         log.info("🏠 GET /api/v1/profile/home - 获取个人中心主页: user={}", authentication.getName());
         
         try {
-            String userId = extractUserIdFromRequest(request);
+            String userId = jwtService.getCurrentUserId();
             if (userId == null) {
                 log.warn("⚠️ 无法提取用户ID");
                 return ResponseEntity.badRequest().build();
@@ -71,7 +52,6 @@ public class ProfileController {
     @GetMapping("/artworks")
     public ResponseEntity<ProfileDto.UserArtworkListResponse> getUserArtworks(
             Authentication authentication,
-            HttpServletRequest request,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         
@@ -79,7 +59,7 @@ public class ProfileController {
             authentication.getName(), page, size);
         
         try {
-            String userId = extractUserIdFromRequest(request);
+            String userId = jwtService.getCurrentUserId();
             if (userId == null) {
                 log.warn("⚠️ 无法提取用户ID");
                 return ResponseEntity.badRequest().build();
@@ -103,12 +83,11 @@ public class ProfileController {
      */
     @GetMapping("/stats")
     public ResponseEntity<ProfileDto.UserStats> getUserStats(
-            Authentication authentication,
-            HttpServletRequest request) {
+            Authentication authentication) {
         log.info("📊 GET /api/v1/profile/stats - 获取用户统计: user={}", authentication.getName());
         
         try {
-            String userId = extractUserIdFromRequest(request);
+            String userId = jwtService.getCurrentUserId();
             if (userId == null) {
                 log.warn("⚠️ 无法提取用户ID");
                 return ResponseEntity.badRequest().build();
@@ -132,14 +111,13 @@ public class ProfileController {
     @DeleteMapping("/artworks/{drawingId}")
     public ResponseEntity<Void> deleteArtwork(
             Authentication authentication,
-            HttpServletRequest request,
             @PathVariable String drawingId) {
         
         log.info("🗑️ DELETE /api/v1/profile/artworks/{} - 删除作品: user={}", 
             drawingId, authentication.getName());
         
         try {
-            String userId = extractUserIdFromRequest(request);
+            String userId = jwtService.getCurrentUserId();
             if (userId == null) {
                 log.warn("⚠️ 无法提取用户ID");
                 return ResponseEntity.badRequest().build();
@@ -168,7 +146,6 @@ public class ProfileController {
     @PutMapping("/artworks/{drawingId}/sharing")
     public ResponseEntity<Void> toggleArtworkSharing(
             Authentication authentication,
-            HttpServletRequest request,
             @PathVariable String drawingId,
             @RequestParam boolean shareToGallery) {
         
@@ -176,7 +153,7 @@ public class ProfileController {
             drawingId, authentication.getName(), shareToGallery);
         
         try {
-            String userId = extractUserIdFromRequest(request);
+            String userId = jwtService.getCurrentUserId();
             if (userId == null) {
                 log.warn("⚠️ 无法提取用户ID");
                 return ResponseEntity.badRequest().build();

@@ -59,8 +59,8 @@ public class GalleryService {
      * @param drawingId The ID of the drawing to be shared.
      * @return The updated Drawing entity, or null if not found.
      */
-    @Transactional // Ensures the database operation is atomic.
-    @CacheEvict(value = "galleryCache", key = "'publicGallery'")
+    @Transactional
+    @CacheEvict(value = "galleryCache", allEntries = true)
     public Optional<Drawing> shareDrawingToGallery(String drawingId) {
         // Find the drawing by its ID
         Optional<Drawing> drawingOptional = drawingRepository.findById(drawingId);
