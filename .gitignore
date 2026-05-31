@@ -8,6 +8,7 @@
 !.vscode/extensions.json
 *.DS_Store
 Thumbs.db
+*Zone.Identifier
 
 # Log files
 *.log
@@ -15,6 +16,10 @@ logs/
 
 # Local data storage
 storage/
+
+# Environment files
+.env
+!.env.example
 
 # Node / Vue
 node_modules/

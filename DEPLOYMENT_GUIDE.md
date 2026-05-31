@@ -53,7 +53,7 @@ docker exec -it ai-drawing-redis redis-cli ping
 #### 验证MySQL连接
 ```bash
 # 连接MySQL
-docker exec -it ai-drawing-mysql mysql -uroot -pDB_PASSWORD_PLACEHOLDER
+docker exec -it ai-drawing-mysql mysql -uroot -p${DB_PASSWORD}
 
 # 在MySQL中执行
 SHOW DATABASES;
@@ -156,7 +156,7 @@ docker-compose logs -f rabbitmq
 docker exec -it ai-drawing-redis redis-cli monitor
 
 # MySQL慢查询日志
-docker exec -it ai-drawing-mysql mysql -uroot -pDB_PASSWORD_PLACEHOLDER -e "SHOW PROCESSLIST;"
+docker exec -it ai-drawing-mysql mysql -uroot -p${DB_PASSWORD} -e "SHOW PROCESSLIST;"
 ```
 
 ## 🚨 故障排除
@@ -178,7 +178,7 @@ docker exec -it ai-drawing-mysql mysql -uroot -pDB_PASSWORD_PLACEHOLDER -e "SHOW
    docker-compose logs mysql
    
    # 重置MySQL密码
-   docker exec -it ai-drawing-mysql mysql -uroot -pDB_PASSWORD_PLACEHOLDER -e "ALTER USER 'root'@'%' IDENTIFIED BY 'DB_PASSWORD_PLACEHOLDER';"
+   docker exec -it ai-drawing-mysql mysql -uroot -p${DB_PASSWORD} -e "ALTER USER 'root'@'%' IDENTIFIED BY 'new_password';"
    ```
 
 3. **端口冲突**
@@ -219,7 +219,7 @@ BACKUP_DIR="/backup/ai-drawing-$DATE"
 mkdir -p $BACKUP_DIR
 
 # 备份MySQL数据
-docker exec ai-drawing-mysql mysqldump -uroot -pDB_PASSWORD_PLACEHOLDER ai_drawing_db > $BACKUP_DIR/mysql_backup.sql
+docker exec ai-drawing-mysql mysqldump -uroot -p${DB_PASSWORD} ai_drawing_db > $BACKUP_DIR/mysql_backup.sql
 
 # 备份Redis数据
 docker exec ai-drawing-redis redis-cli BGSAVE

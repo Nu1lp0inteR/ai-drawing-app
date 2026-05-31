@@ -32,7 +32,7 @@ public class JwtService {
     private static final Logger logger = LoggerFactory.getLogger(JwtService.class);
 
     // JWT密钥配置 - 在生产环境中应从环境变量或配置中心获取
-    @Value("${app.jwt.secret:JWT_SECRET_PLACEHOLDER}")
+    @Value("${app.jwt.secret}")
     private String jwtSecret;
 
     @Value("${app.jwt.access-token-expiration:3600000}") // 1小时 = 3600000ms

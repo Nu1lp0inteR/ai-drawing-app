@@ -26,7 +26,7 @@ services:
     image: mysql:8.0
     container_name: ai-drawing-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: DB_PASSWORD_PLACEHOLDER
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ai_drawing_db
       MYSQL_CHARACTER_SET_SERVER: utf8mb4
       MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci

@@ -59,7 +59,7 @@ cd frontend && npm install && npm run dev
 |------|------|------|
 | 后端 | 8080 | Spring Boot |
 | 前端开发服务器 | 5173 | Vite |
-| MySQL | 3306 | root / DB_PASSWORD_PLACEHOLDER，库名 `ai_drawing_db` |
+| MySQL | 3306 | root / ${DB_PASSWORD}，库名 `ai_drawing_db` |
 | Redis | 6379 | 无密码 |
 | RabbitMQ AMQP | 5672 | guest / guest |
 | RabbitMQ 管理界面 | 15672 | Web 控制台 |
