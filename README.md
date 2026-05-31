@@ -36,24 +36,31 @@
 
 ### **本地开发运行**
 
-1. **克隆仓库**  
-   git clone \[https://github.com/Nu1lp0inteR/ai-drawing-app.git\](https://github.com/Nu1lp0inteR/ai-drawing-app.git)  
+1. **克隆仓库并配置环境变量**
+   ```bash
+   git clone https://github.com/Nu1lp0inteR/ai-drawing-app.git
    cd ai-drawing-app
+   cp .env.example .env
+   # 编辑 .env 文件，填入您的 MySQL 密码、JWT 密钥和 ComfyUI 地址
+   ```
 
-2. **配置后端**  
-   * 导航到 backend/src/main/resources/ 目录。  
-   * 复制 application.properties.example 并重命名为 application.properties。  
-   * 根据您的本地环境，修改文件中的数据库、RabbitMQ、Redis和ComfyUI连接信息。  
-3. **启动后端服务 (使用Docker)**  
-   * 在项目根目录下，运行 docker-compose up \-d 来启动 MySQL, RabbitMQ 和 Redis 服务。  
-   * 在IDE中启动 backend Spring Boot 应用。  
-4. **启动前端服务**  
-   cd frontend  
-   npm install  
-   npm run dev
+2. **启动基础设施（MySQL, Redis, RabbitMQ）**
+   ```bash
+   export $(cat .env | xargs) && docker-compose up -d
+   ```
 
-5. **访问应用**  
-   * 打开浏览器，访问 http://localhost:5173 (或Vite指定的其他端口)。
+3. **启动后端**
+   ```bash
+   cd backend && export $(cat ../.env | xargs) && ./mvnw spring-boot:run
+   ```
+
+4. **启动前端**
+   ```bash
+   cd frontend && npm install && npm run dev
+   ```
+
+5. **访问应用**
+   * 打开浏览器，访问 http://localhost:5173
 
 ## **🗺️ 项目蓝图 (Roadmap)**
 

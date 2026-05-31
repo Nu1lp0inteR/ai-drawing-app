@@ -13,11 +13,15 @@
 ## 启动顺序
 
 ```bash
+# 0. 配置环境变量（首次使用）
+cp .env.example .env
+# 编辑 .env 文件填入真实凭据
+
 # 1. 启动基础设施（MySQL、Redis、RabbitMQ）
-docker-compose up -d
+export $(cat .env | xargs) && docker-compose up -d
 
 # 2. 启动后端（端口 8080）
-cd backend && ./mvnw spring-boot:run
+cd backend && export $(cat ../.env | xargs) && ./mvnw spring-boot:run
 
 # 3. 启动前端（端口 5173）
 cd frontend && npm install && npm run dev
