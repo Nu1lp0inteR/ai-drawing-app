@@ -210,6 +210,18 @@ const navigateToFollowersList = () => {
   navigateTo('FollowersList');
 };
 
+// --- fetchCredits (must be defined before provide) ---
+const fetchCredits = async () => {
+  if (!isLoggedIn.value) return;
+  try {
+    const response = await api.get('/api/v1/credits/balance');
+    creditsBalance.value = response.data.balance || 0;
+    console.log('💰 [App] 积分余额:', creditsBalance.value);
+  } catch (error) {
+    console.error('获取积分失败:', error);
+  }
+};
+
 // --- provide (依赖注入) ---
 provide('isLoggedIn', isLoggedIn)
 provide('userInfo', userInfo)
@@ -339,17 +351,6 @@ const handleLoginSuccess = (user) => {
   userInfo.value = user;
   authDialogVisible.value = false;
   fetchCredits();
-};
-
-const fetchCredits = async () => {
-  if (!isLoggedIn.value) return;
-  try {
-    const response = await api.get('/api/v1/credits/balance');
-    creditsBalance.value = response.data.balance || 0;
-    console.log('💰 [App] 积分余额:', creditsBalance.value);
-  } catch (error) {
-    console.error('获取积分失败:', error);
-  }
 };
 
 // --- 用户菜单命令处理 ---
@@ -564,7 +565,7 @@ onUnmounted(() => {
                   个人中心
                 </el-dropdown-item>
                 <el-dropdown-item command="history">
-                  <el-icon><Picture /></el-icon>
+                  <el-icon><IconPicture /></el-icon>
                   我的作品
                 </el-dropdown-item>
                 <el-dropdown-item command="following">
