@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, inject, watchEffect } from 'vue';
+import { ref, onMounted, onUnmounted, inject, watchEffect, computed } from 'vue';
 import api from '@/api';
 import { ElMessage, ElCard, ElAvatar, ElTag, ElPagination, ElEmpty, ElIcon, ElButton } from 'element-plus';
 import { User, Picture, Calendar, Share, Plus, Check } from '@element-plus/icons-vue';
@@ -38,6 +38,10 @@ const followInfo = ref({
   followersCount: 0
 });
 const isFollowLoading = ref(false);
+
+const isSmallScreen = ref(false)
+const checkScreenSize = () => { isSmallScreen.value = window.innerWidth <= 768 }
+const paginationLayout = computed(() => isSmallScreen.value ? 'prev, pager, next' : 'prev, pager, next, jumper')
 
 // 注入依赖
 const isLoggedIn = inject('isLoggedIn');
@@ -289,6 +293,8 @@ onMounted(async () => {
   
   // 添加全局关注状态变化监听
   window.addEventListener('followStatusChange', handleGlobalFollowStatusChange);
+  checkScreenSize();
+  window.addEventListener('resize', checkScreenSize);
   console.log('📡 [UserProfile] 已添加全局关注状态变化监听');
   
   console.log('✅ [UserProfile] 组件挂载完成');
@@ -296,6 +302,7 @@ onMounted(async () => {
 
 // 组件卸载时移除事件监听
 onUnmounted(() => {
+  window.removeEventListener('resize', checkScreenSize)
   window.removeEventListener('followStatusChange', handleGlobalFollowStatusChange);
   console.log('📡 [UserProfile] 已移除全局关注状态变化监听');
 });
@@ -428,7 +435,7 @@ watchEffect(async () => {
           v-model:current-page="currentPage"
           :page-size="pageSize"
           :total="artworkList.totalCount"
-          layout="prev, pager, next, jumper"
+          :layout="paginationLayout"
           @current-change="handlePageChange"
         />
       </div>
@@ -657,28 +664,61 @@ watchEffect(async () => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .user-profile-container {
+    padding: 12px;
+  }
   .user-info {
     flex-direction: column;
     text-align: center;
   }
-  
   .user-header {
     flex-direction: column;
     gap: 12px;
   }
-  
   .follow-btn {
     margin-left: 0;
   }
-  
   .user-stats {
     margin-left: 0;
     justify-content: center;
+    flex-wrap: wrap;
+    gap: 20px;
   }
-  
   .artworks-grid {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 15px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .artwork-image-container {
+    height: 250px;
+  }
+  .artwork-overlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.25);
+  }
+  .stat-number {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-profile-container {
+    padding: 8px;
+  }
+  .user-stats {
+    gap: 12px;
+  }
+  .stat-number {
+    font-size: 18px;
+  }
+  .artworks-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .artwork-image-container {
+    height: 200px;
+  }
+  .page-title {
+    font-size: 18px;
   }
 }
 </style>

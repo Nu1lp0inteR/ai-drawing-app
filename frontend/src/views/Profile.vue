@@ -30,6 +30,26 @@
       </div>
     </el-card>
 
+    <el-card class="credits-card" shadow="hover">
+      <div class="credits-section">
+        <div class="credits-balance">
+          <el-icon :size="24"><Coin /></el-icon>
+          <span class="balance-number">{{ creditsBalance }}</span>
+          <span class="balance-label">积分</span>
+        </div>
+        <el-button
+          type="primary"
+          :icon="Coin"
+          :loading="signingIn"
+          :disabled="todaySignedIn"
+          @click="handleSignIn"
+        >
+          {{ todaySignedIn ? '今日已签到' : '每日签到 +10' }}
+        </el-button>
+      </div>
+      <p class="credits-hint">每次生成消耗 1 积分，不足时请签到获取</p>
+    </el-card>
+
     <!-- 作品管理区域 -->
     <el-card class="artworks-section" shadow="always">
       <template #header>
@@ -131,7 +151,7 @@
             v-model:page-size="pageSize"
             :total="artworkList.totalCount"
             :page-sizes="[10, 20, 50]"
-            layout="total, sizes, prev, pager, next, jumper"
+            :layout="paginationLayout"
             @size-change="handleSizeChange"
             @current-change="handleCurrentChange"
           />
@@ -148,7 +168,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, inject, onMounted, onUnmounted, computed } from 'vue'
 import api from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
@@ -157,7 +177,8 @@ import {
   Refresh, 
   View, 
   Share, 
-  Delete 
+  Delete,
+  Coin
 } from '@element-plus/icons-vue'
 import ArtworkDetailModal from '../components/ArtworkDetailModal.vue'
 import { getAllDrawings, deleteDrawing as deleteFromDB } from '../utils/indexedDB.js'
@@ -178,6 +199,38 @@ const pageSize = ref(20)
 
 const detailModalVisible = ref(false)
 const selectedArtwork = ref(null)
+
+const isSmallScreen = ref(false)
+const checkScreenSize = () => { isSmallScreen.value = window.innerWidth <= 768 }
+const paginationLayout = computed(() => isSmallScreen.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper')
+
+const creditsBalance = ref(0)
+const todaySignedIn = ref(false)
+const signingIn = ref(false)
+
+async function fetchCredits() {
+  try {
+    const response = await api.get('/api/v1/credits/balance')
+    creditsBalance.value = response.data.balance || 0
+    todaySignedIn.value = response.data.today_signed_in || false
+  } catch (error) {
+    console.error('获取积分信息失败:', error)
+  }
+}
+
+async function handleSignIn() {
+  signingIn.value = true
+  try {
+    const response = await api.post('/api/v1/credits/sign-in')
+    creditsBalance.value = response.data.balance
+    todaySignedIn.value = true
+    ElMessage.success(response.data.message || '签到成功')
+  } catch (error) {
+    ElMessage.warning(error.response?.data?.message || '签到失败')
+  } finally {
+    signingIn.value = false
+  }
+}
 
 async function fetchProfileHome() {
   try {
@@ -213,6 +266,7 @@ async function fetchProfileHome() {
     }
 
     console.log(`✅ [Profile] 从 IndexedDB 加载了 ${localDrawings.length} 张本地作品`)
+    fetchCredits()
   } catch (error) {
     console.error('❌ [Profile] 获取数据失败:', error)
     handleAuthError(error)
@@ -481,6 +535,8 @@ onMounted(() => {
     window.addEventListener('drawingCompleted', handleNewDrawingEvent)
     window.addEventListener('userLogout', handleLogoutEvent)
     window.addEventListener('followStatusChange', handleFollowStatusChange)
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
     
     console.log('✅ [Profile] 组件挂载完成')
   } catch (error) {
@@ -489,7 +545,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  // 清理事件监听器
+  window.removeEventListener('resize', checkScreenSize)
   window.removeEventListener('drawingCompleted', handleNewDrawingEvent)
   window.removeEventListener('userLogout', handleLogoutEvent)
   window.removeEventListener('followStatusChange', handleFollowStatusChange)
@@ -564,6 +620,39 @@ onUnmounted(() => {
 .stat-label {
   font-size: 12px;
   color: #909399;
+}
+
+.credits-card {
+  margin-bottom: 20px;
+}
+
+.credits-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.credits-balance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #409eff;
+}
+
+.balance-number {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.balance-label {
+  font-size: 16px;
+  color: #909399;
+}
+
+.credits-hint {
+  margin: 8px 0 0;
+  color: #909399;
+  font-size: 12px;
 }
 
 /* 作品管理区域 */
@@ -717,19 +806,61 @@ onUnmounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+  .profile-container {
+    padding: 12px;
+  }
   .user-info {
     flex-direction: column;
     text-align: center;
   }
-  
   .user-stats {
     margin-left: 0;
     margin-top: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
   }
-  
+  .stat-number {
+    font-size: 20px;
+  }
+  .credits-section {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
   .artworks-grid {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 15px;
+  }
+  .artwork-overlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.25);
+  }
+  .artwork-card:hover .artwork-overlay,
+  .artwork-card:hover .artwork-image {
+    transform: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-container {
+    padding: 8px;
+  }
+  .user-stats {
+    gap: 12px;
+  }
+  .stat-number {
+    font-size: 18px;
+  }
+  .user-details h2 {
+    font-size: 20px;
+  }
+  .artworks-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .balance-number {
+    font-size: 24px;
   }
 }
 </style>

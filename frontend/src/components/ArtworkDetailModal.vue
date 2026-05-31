@@ -9,7 +9,7 @@
 
 <script setup>
 import { ref, computed, watch, inject } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 
 const isLoggedIn = inject('isLoggedIn')
@@ -185,7 +185,15 @@ function loadMoreComments() {
 async function handleDelete() {
   const drawingId = (artworkData.value || props.artwork)?.id
   if (!drawingId) return
-  if (!confirm('确定要删除此作品吗？')) return
+  try {
+    await ElMessageBox.confirm('确定要删除此作品吗？删除后无法恢复。', '确认删除', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
   try {
     await api.delete(`/api/v1/ai-drawing/${drawingId}`)
     ElMessage.success('作品已删除')
@@ -391,7 +399,7 @@ const handleImageError = () => {
               <p class="comment-text">{{ comment.content }}</p>
             </div>
             <el-button
-              v-if="isLoggedIn"
+              v-if="isLoggedIn && comment.user_id === userInfo?.id"
               size="small"
               text
               type="danger"

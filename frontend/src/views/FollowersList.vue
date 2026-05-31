@@ -446,18 +446,28 @@ onActivated(async () => {
   .followers-list-container {
     padding: 16px;
   }
-  
   .followers-grid {
     grid-template-columns: 1fr;
     gap: 16px;
   }
-  
   .page-header {
     padding: 12px 16px;
   }
-  
   .page-title {
     font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .followers-list-container {
+    padding: 8px;
+  }
+  .followers-grid {
+    gap: 12px;
+  }
+  .user-card-actions {
+    flex-wrap: wrap;
+    gap: 6px;
   }
 }
 </style>

@@ -10,6 +10,7 @@ import com.aidrawing.backend.repository.DrawingRepository;
 import com.aidrawing.backend.repository.LikeRepository;
 import com.aidrawing.backend.repository.UserRepository;
 import com.aidrawing.backend.service.ComfyUIService;
+import com.aidrawing.backend.service.CreditService;
 import com.aidrawing.backend.service.DrawingTaskService;
 import com.aidrawing.backend.service.GalleryService;
 import com.aidrawing.backend.service.JwtService;
@@ -53,6 +54,7 @@ public class DrawingController {
     private final LikeRepository likeRepository;
     private final CommentRepository commentRepository;
     private final RedisTemplate<String, String> redisTemplate;
+    private final CreditService creditService;
 
     @Autowired
     public DrawingController(DrawingTaskService drawingTaskService, GalleryService galleryService,
@@ -61,7 +63,8 @@ public class DrawingController {
                              ComfyUIService comfyUIService,
                              LikeRepository likeRepository,
                              CommentRepository commentRepository,
-                             RedisTemplate<String, String> redisTemplate) {
+                             RedisTemplate<String, String> redisTemplate,
+                             CreditService creditService) {
         this.drawingTaskService = drawingTaskService;
         this.galleryService = galleryService;
         this.drawingRepository = drawingRepository;
@@ -72,6 +75,7 @@ public class DrawingController {
         this.likeRepository = likeRepository;
         this.commentRepository = commentRepository;
         this.redisTemplate = redisTemplate;
+        this.creditService = creditService;
     }
 
     @RateLimit(maxRequests = 10, timeWindowSeconds = 60, key = "generate")
@@ -81,10 +85,20 @@ public class DrawingController {
         if (userId != null) {
             request.setUserId(userId);
             logger.info("🔑 [DrawingController] 为生图任务设置用户ID: {}", userId);
+
+            if (!creditService.deductCredits(userId, 1, "生成图片: " + truncatePrompt(request.getPrompt()))) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("message", "积分不足，请签到获取积分", "status", "INSUFFICIENT_CREDITS"));
+            }
         }
         
         drawingTaskService.sendDrawingTask(request);
         return ResponseEntity.ok(Map.of("message", "Task has been successfully queued.", "status", "QUEUED"));
+    }
+
+    private String truncatePrompt(String prompt) {
+        if (prompt == null) return "";
+        return prompt.length() > 60 ? prompt.substring(0, 60) + "..." : prompt;
     }
 
     /**

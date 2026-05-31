@@ -50,22 +50,26 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RedisTemplate<String, String> redisTemplate;
+    private final CreditService creditService;
 
     @Autowired
     public AuthService(UserRepository userRepository,
                       PasswordEncoder passwordEncoder,
                       JwtService jwtService,
-                      RedisTemplate<String, String> redisTemplate) {
+                      RedisTemplate<String, String> redisTemplate,
+                      CreditService creditService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.redisTemplate = redisTemplate;
+        this.creditService = creditService;
     }
 
     /**
      * 用户注册
      * User registration
      */
+    @Transactional
     public AuthResult registerUser(String username, String email, String password) {
         logger.info("🎯 开始用户注册流程: username={}, email={}", username, email);
 
@@ -94,6 +98,8 @@ public class AuthService {
             User savedUser = userRepository.save(newUser);
 
             logger.info("✅ 用户注册成功: id={}, username={}", savedUser.getId(), savedUser.getUsername());
+
+            creditService.createForUser(savedUser);
 
             // 4. 生成JWT Token
             String accessToken = jwtService.generateAccessToken(savedUser.getId(), savedUser.getUsername());
@@ -198,16 +204,48 @@ public class AuthService {
     /**
      * 用户登出
      * User logout
+     *
+     * 将 accessToken 和 refreshToken 加入 Redis 黑名单，
+     * 防止已签发的 token 在有效期内被继续使用。
      */
-    public void logoutUser(String userId) {
-        logger.info("🚪 用户登出: userId={}", userId);
-        try {
-            // 删除Redis中的刷新Token
-            removeRefreshToken(userId);
-            logger.info("✅ 用户登出成功: userId={}", userId);
-        } catch (Exception e) {
-            logger.error("❌ 用户登出失败: userId={}", userId, e);
+    public void logoutUser(String accessToken, String refreshToken) {
+        logger.info("🚪 用户登出：将 token 加入黑名单");
+
+        if (accessToken != null) {
+            String userId = jwtService.getUserIdFromToken(accessToken);
+            long remainingSeconds = calculateRemainingSeconds(accessToken);
+            if (remainingSeconds > 0 && userId != null) {
+                blacklistToken(accessToken, userId, remainingSeconds);
+            }
         }
+
+        if (refreshToken != null) {
+            String userId = jwtService.getUserIdFromToken(refreshToken);
+            long remainingSeconds = calculateRemainingSeconds(refreshToken);
+            if (remainingSeconds > 0 && userId != null) {
+                blacklistToken(refreshToken, userId, remainingSeconds);
+                removeRefreshToken(userId);
+            }
+        }
+
+        logger.info("✅ 用户登出成功");
+    }
+
+    private void blacklistToken(String token, String userId, long ttlSeconds) {
+        try {
+            String key = "jwt:blacklist:" + token;
+            redisTemplate.opsForValue().set(key, userId, Duration.ofSeconds(ttlSeconds));
+            logger.debug("Token 已加入黑名单: userId={}, ttl={}s", userId, ttlSeconds);
+        } catch (Exception e) {
+            logger.error("Token 黑名单写入失败 (fail-open): {}", e.getMessage());
+        }
+    }
+
+    private long calculateRemainingSeconds(String token) {
+        java.util.Date expiration = jwtService.getExpirationDateFromToken(token);
+        if (expiration == null) return 0;
+        long remaining = (expiration.getTime() - System.currentTimeMillis()) / 1000;
+        return Math.max(0, remaining);
     }
 
     /**

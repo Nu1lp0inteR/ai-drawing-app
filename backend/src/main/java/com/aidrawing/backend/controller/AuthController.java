@@ -187,23 +187,34 @@ public class AuthController {
      * 
      * POST /api/v1/auth/logout
      * 
-     * @param userId 用户ID (从JWT Token中提取)
-     * @return 登出结果
+     * 从 Authorization header 提取 token，将 access 和 refresh token 加入 Redis 黑名单。
+     * 黑名单中的 token 在剩余有效期内无法再使用。
      */
     @PostMapping("/logout")
-    public ResponseEntity<AuthDto.ApiResponse<String>> logout(@RequestParam String userId) {
+    public ResponseEntity<AuthDto.ApiResponse<String>> logout(
+            @RequestParam(required = false) String refreshToken,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
         String endpoint = "POST /api/v1/auth/logout";
-        logger.info("🚪 {} - 开始用户登出: userId={}", endpoint, userId);
+        logger.info("🚪 {} - 开始用户登出", endpoint);
 
         try {
-            // 调用认证服务进行登出
-            authService.logoutUser(userId);
+            String accessToken = null;
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                accessToken = authHeader.substring(7);
+            }
 
-            logger.info("✅ {} - 用户登出成功: userId={}", endpoint, userId);
+            if (accessToken == null) {
+                return ResponseEntity.badRequest()
+                    .body(AuthDto.ApiResponse.error("未提供有效的访问令牌"));
+            }
+
+            authService.logoutUser(accessToken, refreshToken);
+
             return ResponseEntity.ok(AuthDto.ApiResponse.success("登出成功", "用户已安全登出"));
 
         } catch (Exception e) {
-            logger.error("❌ {} - 登出过程中发生异常: userId={}", endpoint, userId, e);
+            logger.error("❌ {} - 登出过程中发生异常", endpoint, e);
             return ResponseEntity.internalServerError()
                 .body(AuthDto.ApiResponse.error("服务器内部错误，请稍后重试"));
         }

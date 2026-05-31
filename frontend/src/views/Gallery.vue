@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onActivated, onUnmounted, inject } from 'vue';
 import api from '@/api';
-import { ElMessage, ElButton, ElIcon } from 'element-plus';
+import { ElMessage, ElMessageBox, ElButton, ElIcon } from 'element-plus';
 import { User, Picture } from '@element-plus/icons-vue';
 import ArtworkDetailModal from '@/components/ArtworkDetailModal.vue';
 
@@ -70,6 +70,14 @@ const switchMode = (mode) => {
   galleryMode.value = mode;
   galleryPage.value = 0;
   galleryTotalPages.value = 0;
+  galleryItems.value = [];
+  fetchGallery(0).then(() => setupObserver());
+};
+
+const searchGallery = () => {
+  galleryPage.value = 0;
+  galleryTotalPages.value = 0;
+  galleryItems.value = [];
   fetchGallery(0).then(() => setupObserver());
 };
 
@@ -147,7 +155,15 @@ const toggleLike = async (item) => {
 
 const handleDeleteDrawing = async (item, event) => {
   event.stopPropagation();
-  if (!confirm('确定要删除此作品吗？')) return;
+  try {
+    await ElMessageBox.confirm('确定要删除此作品吗？删除后无法恢复。', '确认删除', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
   try {
     await api.delete(`/api/v1/ai-drawing/${item.id}`);
     galleryItems.value = galleryItems.value.filter(i => i.id !== item.id);
@@ -215,15 +231,15 @@ onUnmounted(() => {
         v-model="keyword"
         placeholder="搜索提示词..."
         clearable
-        @clear="fetchGallery(0).then(() => setupObserver())"
-        @keyup.enter="fetchGallery(0).then(() => setupObserver())"
+        @clear="searchGallery"
+        @keyup.enter="searchGallery"
         style="flex: 1; max-width: 300px;"
       />
       <el-select
         v-model="selectedModel"
         placeholder="全部模型"
         clearable
-        @clear="fetchGallery(0).then(() => setupObserver())"
+        @clear="searchGallery"
         style="width: 180px;"
       >
         <el-option
@@ -233,7 +249,7 @@ onUnmounted(() => {
           :value="m.key"
         />
       </el-select>
-      <el-button type="primary" @click="fetchGallery(0).then(() => setupObserver())">搜索</el-button>
+      <el-button type="primary" @click="searchGallery">搜索</el-button>
     </div>
     <el-scrollbar>
       <div v-if="!isLoading && galleryItems.length === 0" class="empty-state">
@@ -529,5 +545,68 @@ onUnmounted(() => {
   padding: 16px;
   color: #999;
   font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .gallery-container {
+    padding: 12px;
+  }
+  .gallery-search-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .gallery-search-bar .el-input {
+    flex: 1 1 100%;
+    max-width: 100% !important;
+  }
+  .gallery-search-bar .el-select {
+    flex: 1 1 45%;
+    width: auto !important;
+  }
+  .gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .gallery-item .el-image {
+    height: 280px;
+  }
+  .item-info {
+    opacity: 1;
+    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+    padding: 12px 8px 8px 8px;
+  }
+  .item-actions {
+    flex-wrap: wrap;
+  }
+  .item-actions .el-button {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  .prompt-text {
+    font-size: 12px;
+  }
+  .empty-state {
+    height: calc(100dvh - 120px);
+  }
+}
+
+@media (max-width: 480px) {
+  .gallery-container {
+    padding: 8px;
+  }
+  .gallery-search-bar .el-select {
+    flex: 1 1 100%;
+  }
+  .gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .gallery-item .el-image {
+    height: 220px;
+  }
+  .tab-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
 }
 </style>

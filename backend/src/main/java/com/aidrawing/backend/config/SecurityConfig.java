@@ -82,12 +82,22 @@ public class SecurityConfig {
                     "/api/v1/hybrid/**",         // 混合画廊API (暂时公开)
                     "/api/v1/enterprise/gallery/public", // 企业级公共画廊
                     "/api/v1/enterprise/gallery/health", // 健康检查
+                    "/api/v1/enterprise/gallery/artwork/**", // 公开作品详情
                     "/api/v1/users/*/profile",   // 用户公开个人主页
                     "/api/v1/users/*/artworks",  // 用户公开作品列表
                     "/api/v1/follows/users/*/following", // 公开查看用户关注列表
                     "/api/v1/follows/users/*/followers", // 公开查看用户粉丝列表
                     "/api/v1/follows/*/status",          // 公开查看关注状态
                     "/api/v1/images/**",         // 图片访问
+                    "/api/v1/gallery/**",        // 公共画廊
+                    "/api/v1/ai-drawing/models", // AI模型列表
+                    "/api/v1/ai-drawing/history", // 旧画廊接口
+                    "/api/v1/ai-drawing/working-gallery", // 备用画廊
+                    "/api/v1/ai-drawing/*",      // 作品详情查看 (GET only via controller checks)
+                    "/api/v1/comments/drawings/**", // 公开查看评论
+                    "/api/v1/likes/drawings/*/status", // 公开查看点赞状态
+                    "/api/v1/likes/drawings/*",  // 公开查看点赞数
+                    "/api/v1/likes/users/*",     // 公开查看用户点赞
                     "/ws/**",                    // WebSocket连接 - 修正路径
                     "/error"                     // 错误页面
                 ).permitAll()
@@ -103,7 +113,8 @@ public class SecurityConfig {
                     "/api/v1/profile/**",                    // 用户档案API
                     "/api/v1/follows/current-user/**",      // 当前用户的关注/粉丝列表
                     "/api/v1/follows/*",                     // 关注/取消关注操作
-                    "/api/v1/likes/**"                       // 点赞相关API
+                    "/api/v1/likes/**",              // 点赞相关API
+                    "/api/v1/credits/**"              // 积分相关API
                 ).authenticated()
                 
                 // 其他所有请求默认需要认证

@@ -13,12 +13,14 @@ import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import { ElNotification } from 'element-plus'
 import { clearAllDrawings } from './utils/indexedDB.js'
+import api from '@/api'
 
 // --- 状态管理 ---
 const activeView = ref('Studio')
 const isLoggedIn = ref(false)
 const authDialogVisible = ref(false)
 const userInfo = ref(null) // 存储用户信息
+const creditsBalance = ref(0)
 const lastCompletedDrawing = ref(null) // 用于存放最新完成的绘图数据
 const viewingUserId = ref(null) // 当前查看的用户ID（用于用户个人主页）
 
@@ -28,6 +30,7 @@ const isNavigatingProgrammatically = ref(false) // 标记是否为程序化导�
 
 // --- WebSocket 客户端实例 ---
 let stompClient = null
+const wsConnected = ref(false)
 
 // --- 路由管理系统 ---
 
@@ -215,6 +218,8 @@ provide('lastCompletedDrawing', lastCompletedDrawing) // 将最新绘图数据�
 provide('navigateToUserProfile', navigateToUserProfile) // 导航到用户个人主页的方法
 provide('navigateToFollowingList', navigateToFollowingList) // 导航到关注列表页面的方法
 provide('navigateToFollowersList', navigateToFollowersList) // 导航到粉丝列表页面的方法
+provide('creditsBalance', creditsBalance)
+provide('fetchCredits', fetchCredits)
 provide('navigateTo', navigateTo) // 通用导航方法
 provide('goBack', goBack) // 返回功能
 
@@ -234,6 +239,7 @@ const connectWebSocket = () => {
 
   // 定义连接成功后的回调
   stompClient.onConnect = (frame) => {
+    wsConnected.value = true
     console.log('Connected to WebSocket:', frame)
     // 订阅公共广播频道
     stompClient.subscribe('/topic/drawing_complete', (message) => {
@@ -301,8 +307,18 @@ const connectWebSocket = () => {
 
   // 定义连接错误时的回调
   stompClient.onStompError = (frame) => {
+    wsConnected.value = false
     console.error('Broker reported error:', frame.headers['message'])
     console.error('Additional details:', frame.body)
+  };
+
+  stompClient.onWebSocketClose = () => {
+    wsConnected.value = false
+    console.warn('WebSocket connection closed, will auto-reconnect...')
+  };
+
+  stompClient.onDisconnect = () => {
+    wsConnected.value = false
   };
 
   // 激活连接
@@ -322,6 +338,18 @@ const handleLoginSuccess = (user) => {
   isLoggedIn.value = true;
   userInfo.value = user;
   authDialogVisible.value = false;
+  fetchCredits();
+};
+
+const fetchCredits = async () => {
+  if (!isLoggedIn.value) return;
+  try {
+    const response = await api.get('/api/v1/credits/balance');
+    creditsBalance.value = response.data.balance || 0;
+    console.log('💰 [App] 积分余额:', creditsBalance.value);
+  } catch (error) {
+    console.error('获取积分失败:', error);
+  }
 };
 
 // --- 用户菜单命令处理 ---
@@ -349,8 +377,23 @@ const handleUserMenuCommand = (command) => {
   }
 };
 
-const handleLogout = () => {
+const handleLogout = async () => {
   console.log('👋 [App] 用户退出登录');
+
+  const accessToken = localStorage.getItem('accessToken');
+  const refreshToken = localStorage.getItem('refreshToken');
+
+  try {
+    if (accessToken) {
+      await api.post('/api/v1/auth/logout', null, {
+        params: { refreshToken },
+      });
+      console.log('✅ [App] 后端登出成功，token 已加入黑名单');
+    }
+  } catch (error) {
+    console.warn('⚠️ [App] 后端登出请求失败, 继续本地清理:', error.message);
+  }
+
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('userInfo');
@@ -415,6 +458,7 @@ const checkAuthStatus = () => {
     try {
       userInfo.value = JSON.parse(storedUserInfo);
       isLoggedIn.value = true;
+      fetchCredits();
       console.log('✅ [App] 从本地存储恢复登录状态:', userInfo.value.username);
     } catch (error) {
       console.error('❌ [App] 解析用户信息失败:', error);
@@ -490,6 +534,7 @@ onUnmounted(() => {
         <div class="logo">
           <img src="https://vuejs.org/images/logo.png" alt="Vue Logo" />
           <h1>AI 绘画工作室</h1>
+          <span class="ws-indicator" :class="{ connected: wsConnected }" :title="wsConnected ? 'WebSocket 已连接' : 'WebSocket 断开, 正在重连...'"></span>
         </div>
         <el-menu :default-active="activeView" mode="horizontal" @select="(index) => navigateTo(index)" :ellipsis="false">
           <el-menu-item index="Studio">
@@ -512,6 +557,7 @@ onUnmounted(() => {
             </span>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item disabled>💰 积分: {{ creditsBalance }}</el-dropdown-item>
                 <el-dropdown-item disabled>{{ userInfo?.email }}</el-dropdown-item>
                 <el-dropdown-item divided command="profile">
                   <el-icon><User /></el-icon>
@@ -563,6 +609,7 @@ onUnmounted(() => {
 /* 样式 (无变动) */
 .main-container {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -588,6 +635,19 @@ onUnmounted(() => {
 .logo h1 {
   font-size: 20px;
   margin: 0;
+}
+.ws-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e74c3c;
+  margin-left: 4px;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.ws-indicator.connected {
+  background: #67c23a;
 }
 .el-menu {
   flex-grow: 1;
@@ -617,5 +677,49 @@ onUnmounted(() => {
   background-color: #f0f2f5;
   padding: 0;
   height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 0 12px;
+  }
+  .header-content {
+    gap: 8px;
+  }
+  .logo img {
+    height: 28px;
+    margin-right: 6px;
+  }
+  .logo h1 {
+    font-size: 16px;
+  }
+  .el-menu {
+    flex-grow: 0;
+  }
+  .el-menu :deep(.el-menu-item) {
+    padding: 0 10px;
+    font-size: 13px;
+  }
+  .user-section {
+    width: auto;
+    flex-shrink: 0;
+  }
+  .username {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo h1 {
+    display: none;
+  }
+  .el-menu :deep(.el-menu-item) {
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .el-menu :deep(.el-menu-item .el-icon) {
+    margin-right: 2px;
+  }
 }
 </style>

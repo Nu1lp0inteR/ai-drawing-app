@@ -7,6 +7,7 @@ import com.aidrawing.backend.entity.User;
 import com.aidrawing.backend.repository.DrawingRepository;
 import com.aidrawing.backend.repository.UserRepository;
 import com.aidrawing.backend.service.ComfyUIService;
+import com.aidrawing.backend.service.CreditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,7 @@ public class DrawingTaskConsumer {
     private final SimpMessagingTemplate messagingTemplate;
     private final DrawingRepository drawingRepository;
     private final UserRepository userRepository;
+    private final CreditService creditService;
 
     @Value("${file.storage.path}")
     private String storagePath;
@@ -47,21 +49,24 @@ public class DrawingTaskConsumer {
             ComfyUIService comfyUIService,
             SimpMessagingTemplate messagingTemplate,
             DrawingRepository drawingRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            CreditService creditService
     ) {
         this.objectMapper = objectMapper;
         this.comfyUIService = comfyUIService;
         this.messagingTemplate = messagingTemplate;
         this.drawingRepository = drawingRepository;
         this.userRepository = userRepository;
+        this.creditService = creditService;
     }
 
     @RabbitListener(queues = "${rabbitmq.queue.name:drawing_task_queue}")
     public void receiveDrawingTask(String message) {
+        DrawingRequest request = null;
         try {
             logger.info("Received a new task from RabbitMQ: {}", message);
 
-            DrawingRequest request = objectMapper.readValue(message, DrawingRequest.class);
+            request = objectMapper.readValue(message, DrawingRequest.class);
             logger.info("Successfully deserialized task. Processing for prompt: {}", request.getPrompt());
 
             logger.info("Delegating to ComfyUIService...");
@@ -92,6 +97,15 @@ public class DrawingTaskConsumer {
 
         } catch (Exception e) {
             logger.error("Task processing failed:", e);
+
+            try {
+                if (request != null && request.getUserId() != null) {
+                    creditService.addCredits(request.getUserId(), 1, "REFUND",
+                        "生成失败退款: " + (request.getPrompt() != null ? request.getPrompt().substring(0, Math.min(request.getPrompt().length(), 40)) : ""));
+                }
+            } catch (Exception refundError) {
+                logger.error("Failed to refund credits: {}", refundError.getMessage());
+            }
 
             try {
                 String errorMessage = getErrorMessage(e);

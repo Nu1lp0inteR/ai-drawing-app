@@ -6,9 +6,19 @@
           <div class="card-header">
             <el-icon><MagicStick /></el-icon>
             <span>生成参数</span>
+            <el-button
+              v-if="isMobileView"
+              text
+              class="collapse-toggle"
+              :class="{ collapsed: paramsCollapsed }"
+              @click="paramsCollapsed = !paramsCollapsed"
+              :icon="ArrowDown"
+            >
+              {{ paramsCollapsed ? '展开' : '收起' }}
+            </el-button>
           </div>
         </template>
-        <el-form :model="params" label-position="top" @submit.prevent="handleSubmit">
+        <el-form v-show="!paramsCollapsed || !isMobileView" :model="params" label-position="top" @submit.prevent="handleSubmit">
           <el-form-item label="模型选择">
             <el-select v-model="params.model_name" style="width: 100%;">
               <el-option v-for="m in availableModels" :key="m.key" :label="m.name" :value="m.key" />
@@ -81,9 +91,21 @@
           <p>生成的图片将在这里显示</p>
         </div>
         <div v-if="imageUrl" class="image-result-container">
-          <img :src="imageUrl" alt="Generated Art" class="generated-image" 
-               @load="console.log('[Studio] 🖼️ Image loaded successfully:', imageUrl)"
-               @error="console.error('[Studio] ❌ Image load failed:', imageUrl)"/>
+          <el-image
+            :src="imageUrl"
+            fit="contain"
+            class="generated-image"
+            :preview-src-list="[imageUrl]"
+            preview-teleported
+            @load="console.log('[Studio] 🖼️ Image loaded successfully:', imageUrl)"
+            @error="console.error('[Studio] ❌ Image load failed:', imageUrl)"
+          >
+            <template #placeholder>
+              <div class="image-placeholder-slot">
+                <el-icon class="is-loading"><IconPicture /></el-icon>
+              </div>
+            </template>
+          </el-image>
           
           <!-- 图片操作区域 -->
           <div class="image-actions">
@@ -128,6 +150,16 @@
           <div class="card-header">
             <el-icon><Clock /></el-icon>
             <span>最近生成 ({{ historyImages.length }}/12)</span>
+            <el-button
+              v-if="isMobileView"
+              text
+              class="collapse-toggle"
+              :class="{ collapsed: historyCollapsed }"
+              @click="historyCollapsed = !historyCollapsed"
+              :icon="ArrowDown"
+            >
+              {{ historyCollapsed ? '展开' : '收起' }}
+            </el-button>
             <el-button 
               type="text" 
               size="small" 
@@ -139,7 +171,7 @@
             </el-button>
           </div>
         </template>
-        <div class="history-content">
+        <div v-show="!historyCollapsed || !isMobileView" class="history-content">
           <div v-if="historyImages.length === 0" class="history-empty">
             <el-icon :size="40" style="color: #c0c4cc;"><IconPicture /></el-icon>
             <p style="color: #909399; margin-top: 10px;">暂无历史记录</p>
@@ -178,7 +210,7 @@
   <el-dialog 
     v-model="previewDialogVisible" 
     title="图片预览" 
-    width="80%"
+    :width="isMobileView ? '95%' : '80%'"
     :show-close="true"
     center
   >
@@ -187,7 +219,7 @@
         <img :src="previewImageUrl" alt="预览图片" class="preview-image" />
       </div>
       <div class="preview-info" v-if="previewImageInfo">
-        <el-descriptions :column="2" border>
+        <el-descriptions :column="isMobileView ? 1 : 2" border>
           <el-descriptions-item label="生成时间">
             {{ new Date(previewImageInfo.createdAt).toLocaleString('zh-CN') }}
           </el-descriptions-item>
@@ -225,7 +257,7 @@
 import { ref, reactive, inject, watch, onMounted, onActivated, onUnmounted } from 'vue'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { MagicStick, Picture as IconPicture, Refresh, Promotion, Lock, Share, Download, Clock, View } from '@element-plus/icons-vue'
+import { MagicStick, Picture as IconPicture, Refresh, Promotion, Lock, Share, Download, Clock, View, ArrowDown } from '@element-plus/icons-vue'
 import { addDrawing, getAllDrawings, deleteDrawing } from '../utils/indexedDB.js'
 
 const isLoggedIn = inject('isLoggedIn')
@@ -258,6 +290,24 @@ const previewImageInfo = ref(null)
 
 let drawingTimeoutId = null
 const DRAWING_TIMEOUT = 5 * 60 * 1000
+
+const isMobileView = ref(false)
+const paramsCollapsed = ref(false)
+const historyCollapsed = ref(false)
+
+function handleResize() {
+  const mobile = window.innerWidth <= 768
+  if (mobile !== isMobileView.value) {
+    isMobileView.value = mobile
+    if (mobile) {
+      paramsCollapsed.value = !!imageUrl.value
+      historyCollapsed.value = true
+    } else {
+      paramsCollapsed.value = false
+      historyCollapsed.value = false
+    }
+  }
+}
 
 // --- 简化的状态管理 ---
 
@@ -303,6 +353,12 @@ watch(lastCompletedDrawing, (newDrawing) => {
     ElMessage.success('图片生成成功！')
   }
 }, { deep: true, immediate: true })
+
+watch(imageUrl, (newUrl) => {
+  if (isMobileView.value && newUrl) {
+    paramsCollapsed.value = true
+  }
+})
 
 // --- 函数 ---
 const loadParametersFromStorage = () => {
@@ -421,6 +477,8 @@ async function fetchAvailableModels() {
 
 
 onMounted(() => {
+  handleResize()
+  window.addEventListener('resize', handleResize)
   loadParametersFromStorage()
   loadHistoryFromIndexedDB()
   fetchAvailableModels()
@@ -441,6 +499,7 @@ onActivated(() => {
 
 // 清理事件监听器
 onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
   window.removeEventListener('loadAutoFillParams', handleLoadAutoFillParams);
   window.removeEventListener('clearHistory', handleClearHistoryEvent);
   window.removeEventListener('drawingFailed', handleDrawingFailedEvent);
@@ -685,6 +744,12 @@ const handleSubmit = async () => {
       return;
     }
     
+    if (error.response?.data?.status === 'INSUFFICIENT_CREDITS') {
+      ElMessage.warning('积分不足！请前往个人中心签到获取积分');
+      isLoading.value = false
+      return;
+    }
+    
     ElMessage.error(`提交失败: ${error.message || '未知错误'}`)
     isLoading.value = false
   } 
@@ -751,6 +816,21 @@ const handleSubmit = async () => {
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.generated-image :deep(.el-image__inner) {
+  border-radius: 8px;
+}
+
+.image-placeholder-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 300px;
+  font-size: 40px;
+  color: #c0c4cc;
 }
 
 .image-actions {
@@ -907,6 +987,121 @@ const handleSubmit = async () => {
   background-color: #fafafa;
   padding: 16px;
   border-radius: 8px;
+}
+
+.collapse-toggle {
+  margin-left: auto;
+  font-size: 12px;
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.collapse-toggle.collapsed :deep(.el-icon) {
+  transform: rotate(-90deg);
+}
+
+.collapse-toggle :deep(.el-icon) {
+  transition: transform 0.2s;
+}
+
+@media (max-width: 768px) {
+  .studio-container {
+    flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+  }
+  .aside-panel {
+    width: 100% !important;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 12px;
+  }
+  .main-content {
+    order: -1;
+    padding: 12px;
+    min-height: 50dvh;
+  }
+  .image-container {
+    max-width: 100vw;
+    max-height: none;
+    height: auto;
+    min-height: 50dvh;
+    padding: 12px;
+  }
+  .image-result-container:hover .image-actions {
+    opacity: 1;
+  }
+  .image-actions {
+    position: static;
+    transform: none;
+    margin-top: 12px;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+    border-radius: 0;
+    opacity: 1;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .image-actions .el-button {
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+  .generated-image {
+    max-width: 100%;
+    max-height: 60dvh;
+  }
+  .history-panel {
+    width: 100% !important;
+    height: auto;
+    border-left: none;
+    border-top: 1px solid #e0e0e0;
+    padding: 12px;
+  }
+  .history-content {
+    height: auto;
+    max-height: none;
+  }
+  .history-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .history-overlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.2);
+  }
+  .history-item:hover .history-overlay {
+    opacity: 1;
+  }
+  .card-header {
+    flex-wrap: wrap;
+  }
+  .collapse-toggle .el-icon {
+    transform: rotate(0);
+  }
+  .preview-content {
+    flex-direction: column;
+  }
+  .preview-image {
+    max-height: 40dvh;
+  }
+}
+
+@media (max-width: 480px) {
+  .history-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .aside-panel {
+    padding: 8px;
+  }
+  .main-content {
+    padding: 8px;
+  }
+  .image-container {
+    padding: 8px;
+  }
 }
 </style>
 
