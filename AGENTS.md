@@ -21,11 +21,23 @@ cp .env.example .env
 export $(cat .env | xargs) && docker-compose up -d
 
 # 2. 启动后端（端口 8080）
+# 重要：启动前先停止旧进程，避免端口冲突
+./stop.sh
 cd backend && export $(cat ../.env | xargs) && ./mvnw spring-boot:run
 
 # 3. 启动前端（端口 5173）
 cd frontend && npm install && npm run dev
 ```
+
+## 停止服务
+
+```bash
+./stop.sh    # 强制停止后端、前端、screen 会话，释放 8080 / 5173 端口
+```
+
+### VS Code 端口堆积问题
+VS Code Remote Server 的 "端口" 面板会自动检测监听中的服务。如果旧进程未正确终止，
+端口列表中会出现多个 8080 / 5173 条目。**解决：每次启动前先 `./stop.sh`**。
 
 ## 常用命令
 
