@@ -86,7 +86,7 @@
   },
   "82": {
     "inputs": {
-      "ckpt_name": "pca-tv-mtd.safetensors",
+      "ckpt_name": "model.safetensors",
       "vae_name": "Baked VAE",
       "clip_skip": -2,
       "lora_name": "None",

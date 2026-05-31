@@ -86,7 +86,7 @@
   },
   "82": {
     "inputs": {
-      "ckpt_name": "pca-tv-mtd.safetensors",
+      "ckpt_name": "model.safetensors",
       "vae_name": "Baked VAE",
       "clip_skip": -2,
       "lora_name": "None",
@@ -197,7 +197,7 @@
   },
   "295": {
     "inputs": {
-      "value": "1girl,solo,"
+      "value": "1girl,solo,kokuto \\(kurousagi1210\\),toshizou \\(0714\\),dema hmw,[clouble,achiki],(natsu no koucha,ebora:0.85),(ixy:0.88),ruten \\(onakasukusuku\\),year 2024,newest,masterpiece,highres,best quality,absurdres,very aesthetic,"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
