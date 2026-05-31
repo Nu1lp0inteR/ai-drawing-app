@@ -86,6 +86,14 @@ public class GalleryService {
      * - key: 使用作品ID作为缓存key，确保每个作品都有独立的缓存项
      * - 作品详情变化频率较低，所以设置了较长的过期时间（1小时）
      */
+    @CacheEvict(value = "galleryCache", allEntries = true)
+    public void clearGalleryCache() {
+    }
+
+    @CacheEvict(value = "drawingDetailsCache", key = "#drawingId")
+    public void clearDrawingCache(String drawingId) {
+    }
+
     @Cacheable(value = "drawingDetailsCache", key = "#drawingId")
     public Optional<Drawing> getDrawingDetails(String drawingId) {
         return drawingRepository.findById(drawingId);

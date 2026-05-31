@@ -42,6 +42,8 @@ public class Drawing {
     private String samplerName;
     private String seed;
 
+    private String modelName;
+
     // The name of the file as saved on our server's local storage.
     // 图片保存在我们服务器本地存储中的文件名。
     @Column(nullable = false)
@@ -119,6 +121,14 @@ public class Drawing {
 
     public void setSeed(String seed) {
         this.seed = seed;
+    }
+
+    public String getModelName() {
+        return modelName;
+    }
+
+    public void setModelName(String modelName) {
+        this.modelName = modelName;
     }
 
     public String getStoredFilename() {

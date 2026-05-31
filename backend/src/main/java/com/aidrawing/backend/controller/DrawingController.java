@@ -1,10 +1,15 @@
 package com.aidrawing.backend.controller;
 
+import com.aidrawing.backend.annotation.RateLimit;
+import com.aidrawing.backend.config.ComfyUIModelProperties;
 import com.aidrawing.backend.dto.DrawingRequest;
 import com.aidrawing.backend.entity.Drawing;
 import com.aidrawing.backend.entity.User;
+import com.aidrawing.backend.repository.CommentRepository;
 import com.aidrawing.backend.repository.DrawingRepository;
+import com.aidrawing.backend.repository.LikeRepository;
 import com.aidrawing.backend.repository.UserRepository;
+import com.aidrawing.backend.service.ComfyUIService;
 import com.aidrawing.backend.service.DrawingTaskService;
 import com.aidrawing.backend.service.GalleryService;
 import com.aidrawing.backend.service.JwtService;
@@ -16,7 +21,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.nio.file.Files;
@@ -42,19 +49,32 @@ public class DrawingController {
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final ObjectMapper objectMapper;
+    private final ComfyUIService comfyUIService;
+    private final LikeRepository likeRepository;
+    private final CommentRepository commentRepository;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @Autowired
     public DrawingController(DrawingTaskService drawingTaskService, GalleryService galleryService,
                              DrawingRepository drawingRepository, UserRepository userRepository,
-                             JwtService jwtService, ObjectMapper objectMapper) {
+                             JwtService jwtService, ObjectMapper objectMapper,
+                             ComfyUIService comfyUIService,
+                             LikeRepository likeRepository,
+                             CommentRepository commentRepository,
+                             RedisTemplate<String, String> redisTemplate) {
         this.drawingTaskService = drawingTaskService;
         this.galleryService = galleryService;
         this.drawingRepository = drawingRepository;
         this.userRepository = userRepository;
         this.jwtService = jwtService;
         this.objectMapper = objectMapper;
+        this.comfyUIService = comfyUIService;
+        this.likeRepository = likeRepository;
+        this.commentRepository = commentRepository;
+        this.redisTemplate = redisTemplate;
     }
 
+    @RateLimit(maxRequests = 10, timeWindowSeconds = 60, key = "generate")
     @PostMapping("/generate")
     public ResponseEntity<?> generateImage(@RequestBody DrawingRequest request) {
         String userId = jwtService.getCurrentUserId();
@@ -187,20 +207,59 @@ public class DrawingController {
         }
     }
 
+    @GetMapping("/models")
+    public ResponseEntity<?> getAvailableModels() {
+        List<Map<String, String>> models = new java.util.ArrayList<>();
+        comfyUIService.getModelProperties().getModels().forEach((key, config) -> {
+            models.add(Map.of(
+                "key", key,
+                "name", config.getName()
+            ));
+        });
+        return ResponseEntity.ok(Map.of("models", models));
+    }
+
     @DeleteMapping("/{drawingId}")
+    @Transactional
     public ResponseEntity<?> deleteDrawing(@PathVariable String drawingId) {
         String userId = jwtService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.status(401).body(Map.of("message", "请先登录"));
         }
-        Optional<Drawing> drawing = drawingRepository.findById(drawingId);
-        if (drawing.isEmpty()) {
+        Optional<Drawing> drawingOpt = drawingRepository.findById(drawingId);
+        if (drawingOpt.isEmpty()) {
             return ResponseEntity.status(404).body(Map.of("message", "作品不存在"));
         }
-        if (!drawing.get().getUser().getId().equals(userId)) {
+        Drawing drawing = drawingOpt.get();
+        if (!drawing.getUser().getId().equals(userId)) {
             return ResponseEntity.status(403).body(Map.of("message", "无权删除此作品"));
         }
-        drawingRepository.delete(drawing.get());
+
+        likeRepository.deleteByDrawingId(drawingId);
+        commentRepository.deleteByDrawingId(drawingId);
+
+        try {
+            redisTemplate.opsForZSet().remove("rank:hot", drawingId);
+        } catch (Exception e) {
+            logger.warn("Failed to remove drawing from hot rank ZSET: {}", e.getMessage());
+        }
+
+        drawingRepository.delete(drawing);
+
+        try {
+            Files.deleteIfExists(Paths.get(storagePath, drawing.getStoredFilename()));
+            logger.info("Deleted file from storage: {}", drawing.getStoredFilename());
+        } catch (Exception e) {
+            logger.warn("Failed to delete image file from storage: {}", e.getMessage());
+        }
+
+        try {
+            galleryService.clearGalleryCache();
+            galleryService.clearDrawingCache(drawingId);
+        } catch (Exception e) {
+            logger.warn("Failed to clear cache: {}", e.getMessage());
+        }
+
         return ResponseEntity.ok(Map.of("message", "作品已删除"));
     }
 

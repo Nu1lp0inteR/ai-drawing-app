@@ -1,44 +1,21 @@
 {
-  "33": {
-    "inputs": {
-      "upscale_type": "latent",
-      "hires_ckpt_name": "(use same)",
-      "latent_upscaler": "city96.xl",
-      "pixel_upscaler": "4x-AnimeSharp.pth",
-      "upscale_by": 1.5,
-      "use_same_seed": false,
-      "seed": 43589179899551,
-      "hires_steps": 18,
-      "denoise": 0.45000000000000007,
-      "iterations": 1,
-      "use_controlnet": false,
-      "control_net_name": "NoobAI_Inpainting_ControlNet.safetensors",
-      "strength": 1,
-      "preprocessor": "MiDaS-DepthMapPreprocessor",
-      "preprocessor_imgs": false
-    },
-    "class_type": "HighRes-Fix Script",
-    "_meta": {
-      "title": "HighRes-Fix Script"
-    }
-  },
   "38": {
     "inputs": {
-      "guide_size": 1728,
+      "guide_size": 2048,
       "guide_size_for": true,
-      "max_size": 1728,
-      "seed": 951779108247181,
-      "steps": 28,
-      "cfg": 6.5,
+      "max_size": 2048,
+      "seed": 639009146676455,
+      "steps": 24,
+      "cfg": 6,
       "sampler_name": "euler_ancestral",
       "scheduler": "sgm_uniform",
-      "denoise": 0.4800000000000001,
-      "feather": 5,
+      "denoise": 0.48,
+      "feather": 8,
       "noise_mask": true,
       "force_inpaint": true,
-      "bbox_threshold": 0.4,
+      "bbox_threshold": 0.3,
       "bbox_dilation": 4,
-      "bbox_crop_factor": 3,
+      "bbox_crop_factor": 2,
       "sam_detection_hint": "center-1",
       "sam_dilation": 4,
       "sam_threshold": 0.6,
@@ -113,12 +90,15 @@
       "vae_name": "Baked VAE",
       "clip_skip": -2,
       "lora_name": "None",
-      "lora_model_strength": 0.8500000000000002,
-      "lora_clip_strength": 0.8500000000000002,
+      "lora_model_strength": 0.85,
+      "lora_clip_strength": 0.85,
       "positive": "",
-      "negative": "",
+      "negative": [
+        "297",
+        0
+      ],
       "token_normalization": "none",
-      "weight_interpretation": "A1111",
+      "weight_interpretation": "comfy",
       "empty_latent_width": 1024,
       "empty_latent_height": 1536,
       "batch_size": 1
@@ -130,9 +110,12 @@
   },
   "83": {
     "inputs": {
-      "seed": 676156326337994,
-      "steps": 32,
-      "cfg": 6,
+      "seed": [
+        "174",
+        0
+      ],
+      "steps": 28,
+      "cfg": 5,
       "sampler_name": "euler_ancestral",
       "scheduler": "sgm_uniform",
       "denoise": 1,
@@ -159,7 +142,7 @@
         4
       ],
       "script": [
-        "33",
+        "265",
         0
       ]
     },
@@ -168,16 +151,66 @@
       "title": "KSampler (Efficient)"
     }
   },
-  "134": {
+  "174": {
     "inputs": {
-      "images": [
-        "38",
-        2
-      ]
+      "seed": 12979978950062
     },
-    "class_type": "PreviewImage",
+    "class_type": "easy seed",
     "_meta": {
-      "title": "预览图像"
+      "title": "随机种"
+    }
+  },
+  "265": {
+    "inputs": {
+      "upscale_type": "latent",
+      "hires_ckpt_name": "(use same)",
+      "latent_upscaler": "ttl_nn.SDXL",
+      "pixel_upscaler": "4x-AnimeSharp.pth",
+      "upscale_by": 1.5,
+      "use_same_seed": false,
+      "seed": [
+        "266",
+        0
+      ],
+      "hires_steps": 18,
+      "denoise": 0.38,
+      "iterations": 1,
+      "use_controlnet": false,
+      "control_net_name": "illustriousXLv1.1_depth_midas_fp16.safetensors",
+      "strength": 1,
+      "preprocessor": "none",
+      "preprocessor_imgs": false
+    },
+    "class_type": "HighRes-Fix Script",
+    "_meta": {
+      "title": "HighRes-Fix Script"
+    }
+  },
+  "266": {
+    "inputs": {
+      "seed": 322902501755258
+    },
+    "class_type": "easy seed",
+    "_meta": {
+      "title": "随机种"
+    }
+  },
+  "295": {
+    "inputs": {
+      "value": "1girl,solo,"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "正面提示词"
+    }
+  },
+  "297": {
+    "inputs": {
+      "value": "(ai-generated:1.05),:q,realistic,no lineart,bad anatomy,bad perspective, bad hands,bad feet,user interface,twitter username, watermark,weibo watermark,speech bubble,weibo username,signature,worst quality, lowres, bad foot,artist name, artist logo, patreon username, patreon logo,facial mark,star sticker,sticker on face,shaded face,"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "负面提示词"
     }
   }
 }

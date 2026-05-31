@@ -25,6 +25,8 @@ public class DrawingRequest {
 
     private String userId;
 
+    private String modelName;
+
     // Getters and Setters
     public String getPrompt() {
         return prompt;
@@ -82,6 +84,14 @@ public class DrawingRequest {
         this.userId = userId;
     }
 
+    public String getModelName() {
+        return modelName;
+    }
+
+    public void setModelName(String modelName) {
+        this.modelName = modelName;
+    }
+
     @Override
     public String toString() {
         return "DrawingRequest{" +
@@ -92,6 +102,7 @@ public class DrawingRequest {
                 ", samplerName='" + samplerName + '\'' +
                 ", seed='" + seed + '\'' +
                 ", userId='" + userId + '\'' +
+                ", modelName='" + modelName + '\'' +
                 '}';
     }
 }

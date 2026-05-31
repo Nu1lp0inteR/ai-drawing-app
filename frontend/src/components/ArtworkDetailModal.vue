@@ -8,9 +8,12 @@
 -->
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, inject } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
+
+const isLoggedIn = inject('isLoggedIn')
+const userInfo = inject('userInfo')
 
 // Props定义 - 支持灵活的使用方式
 const props = defineProps({
@@ -115,6 +118,85 @@ function copyPromptText() {
   });
 }
 
+const comments = ref([])
+const commentTotalPages = ref(0)
+const commentPage = ref(0)
+const commentsLoading = ref(false)
+const newCommentText = ref('')
+const submittingComment = ref(false)
+const commentPageSize = 10
+
+async function fetchComments(reset = false) {
+  const drawingId = (artworkData.value || props.artwork)?.id
+  if (!drawingId) return
+
+  if (reset) { commentPage.value = 0; comments.value = [] }
+  commentsLoading.value = true
+
+  try {
+    const response = await api.get(`/api/v1/comments/drawings/${drawingId}`, {
+      params: { page: commentPage.value, size: commentPageSize }
+    })
+    const data = response.data
+    comments.value = reset ? (data.comments || []) : [...comments.value, ...(data.comments || [])]
+    commentTotalPages.value = data.total_pages || 0
+  } catch (error) {
+    console.error('获取评论失败:', error)
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+async function submitComment() {
+  if (!newCommentText.value.trim()) return
+  submittingComment.value = true
+  try {
+    await api.post('/api/v1/comments', {
+      drawing_id: (artworkData.value || props.artwork).id,
+      content: newCommentText.value.trim()
+    })
+    newCommentText.value = ''
+    ElMessage.success('评论发表成功')
+    fetchComments(true)
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '评论发表失败')
+  } finally {
+    submittingComment.value = false
+  }
+}
+
+async function deleteCommentItem(commentId) {
+  try {
+    await api.delete(`/api/v1/comments/${commentId}`)
+    comments.value = comments.value.filter(c => c.id !== commentId)
+    ElMessage.success('评论已删除')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '删除失败')
+  }
+}
+
+function loadMoreComments() {
+  if (commentPage.value < commentTotalPages.value - 1) {
+    commentPage.value++
+    fetchComments(false)
+  }
+}
+
+async function handleDelete() {
+  const drawingId = (artworkData.value || props.artwork)?.id
+  if (!drawingId) return
+  if (!confirm('确定要删除此作品吗？')) return
+  try {
+    await api.delete(`/api/v1/ai-drawing/${drawingId}`)
+    ElMessage.success('作品已删除')
+    dialogVisible.value = false
+    window.dispatchEvent(new CustomEvent('drawingDeleted', { detail: { id: drawingId } }))
+  } catch (error) {
+    console.error('删除失败:', error)
+    ElMessage.error('删除失败')
+  }
+}
+
 // 格式化时间显示
 const formatDate = (dateString) => {
   if (!dateString) return ''
@@ -135,6 +217,9 @@ watch([() => props.visible, () => props.artworkId], ([visible, id]) => {
   }
   if (visible && props.artwork) {
     artworkData.value = props.artwork
+  }
+  if (visible) {
+    fetchComments(true)
   }
 })
 
@@ -267,6 +352,67 @@ const handleImageError = () => {
           </div>
         </el-col>
       </el-row>
+
+      <div class="comments-section">
+        <h3 class="section-title">评论 ({{ comments.length }})</h3>
+
+        <div v-if="isLoggedIn" class="comment-input-area">
+          <el-input
+            v-model="newCommentText"
+            type="textarea"
+            :rows="2"
+            placeholder="写下你的评论..."
+            maxlength="500"
+            show-word-limit
+          />
+          <el-button
+            type="primary"
+            size="small"
+            :loading="submittingComment"
+            :disabled="!newCommentText.trim()"
+            @click="submitComment"
+            style="margin-top: 8px"
+          >
+            发表评论
+          </el-button>
+        </div>
+        <div v-else class="comment-login-hint">
+          <span>登录后即可发表评论</span>
+        </div>
+
+        <div v-if="comments.length > 0" class="comment-list">
+          <div v-for="comment in comments" :key="comment.id" class="comment-item">
+            <div class="comment-avatar">{{ comment.username?.charAt(0)?.toUpperCase() }}</div>
+            <div class="comment-body">
+              <div class="comment-header">
+                <span class="comment-username">{{ comment.username }}</span>
+                <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
+              </div>
+              <p class="comment-text">{{ comment.content }}</p>
+            </div>
+            <el-button
+              v-if="isLoggedIn"
+              size="small"
+              text
+              type="danger"
+              class="comment-delete-btn"
+              @click="deleteCommentItem(comment.id)"
+            >
+              删除
+            </el-button>
+          </div>
+        </div>
+
+        <div v-if="commentPage < commentTotalPages - 1" class="comment-load-more">
+          <el-button size="small" text :loading="commentsLoading" @click="loadMoreComments">
+            加载更多评论
+          </el-button>
+        </div>
+
+        <div v-if="comments.length === 0 && !commentsLoading" class="comment-empty">
+          <span>暂无评论，来发表第一条吧</span>
+        </div>
+      </div>
     </div>
     
     <!-- 错误状态 -->
@@ -286,6 +432,13 @@ const handleImageError = () => {
         </el-button>
         <el-button type="primary" @click="copyParameters">
           复用参数到创作中心
+        </el-button>
+        <el-button
+          v-if="userInfo && userInfo.id === ((artworkData || artwork)?.authorId)"
+          type="danger"
+          @click="handleDelete"
+        >
+          删除作品
         </el-button>
       </div>
     </template>
@@ -456,6 +609,102 @@ const handleImageError = () => {
   .artwork-detail-content {
     max-height: 80vh;
   }
+}
+
+.comments-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.comment-input-area {
+  margin-bottom: 16px;
+}
+
+.comment-login-hint {
+  text-align: center;
+  padding: 12px;
+  color: #999;
+  font-size: 13px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comment-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+
+.comment-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.comment-username {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.comment-time {
+  font-size: 11px;
+  color: #999;
+}
+
+.comment-text {
+  margin: 0;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.comment-delete-btn {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.comment-load-more {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.comment-empty {
+  text-align: center;
+  padding: 20px;
+  color: #999;
+  font-size: 13px;
 }
 </style>
 

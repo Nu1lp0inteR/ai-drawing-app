@@ -2,7 +2,6 @@
 import { ref, onMounted, onActivated, inject } from 'vue';
 import api from '@/api';
 import { ElMessage } from 'element-plus';
-import { getAllDrawings, deleteDrawing } from '@/utils/indexedDB.js';
 
 const isLoggedIn = inject('isLoggedIn');
 const showAuthDialog = inject('showAuthDialog');
@@ -15,9 +14,7 @@ const totalPages = ref(0);
 const pageSize = 20;
 
 function buildImageUrl(item) {
-  if (item.source === 'indexeddb') return item.imageUrl || '';
-  if (item.stored_filename) return `/api/v1/images/${item.stored_filename}`;
-  return '';
+  return item.stored_filename ? `/api/v1/images/${item.stored_filename}` : '';
 }
 
 async function fetchHistory(reset = false) {
@@ -30,31 +27,10 @@ async function fetchHistory(reset = false) {
         params: { page: page.value, size: pageSize }
       });
       const data = response.data;
-      const serverItems = (data.content || []).map(d => ({ ...d, source: 'server' }));
-      artworks.value = reset ? serverItems : [...artworks.value, ...serverItems];
+      const items = (data.content || []).map(d => ({ ...d, source: 'server' }));
+      artworks.value = reset ? items : [...artworks.value, ...items];
       totalPages.value = data.totalPages;
     }
-
-    const localDrawings = await getAllDrawings();
-    const localItems = localDrawings.map(d => ({
-      id: d.id,
-      prompt: d.prompt || '',
-      negative_prompt: d.negativePrompt || '',
-      steps: d.steps,
-      cfg: d.cfg,
-      sampler_name: d.samplerName,
-      seed: d.seed,
-      imageUrl: d.imageUrl,
-      imageBase64: d.imageBase64,
-      created_at: d.createdAt,
-      source: 'indexeddb',
-      shared_to_gallery: false,
-    }));
-
-    if (reset) {
-      artworks.value = [...localItems.reverse(), ...artworks.value];
-    }
-
   } catch (error) {
     console.error('获取历史记录失败:', error);
   } finally {
@@ -63,33 +39,9 @@ async function fetchHistory(reset = false) {
 }
 
 async function handleShare(item) {
-  if (!item.imageBase64) {
-    ElMessage.warning('该作品没有可分享的图片数据');
-    return;
-  }
   try {
-    const byteString = atob(item.imageBase64);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    const blob = new Blob([ab], { type: 'image/png' });
-    const formData = new FormData();
-    formData.append('image', blob, 'drawing.png');
-    formData.append('params', JSON.stringify({
-      prompt: item.prompt,
-      negative_prompt: item.negative_prompt || '',
-      steps: item.steps,
-      cfg: item.cfg,
-      sampler_name: item.sampler_name,
-      seed: item.seed,
-    }));
-
-    await api.post('/api/v1/ai-drawing/share', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-
-    await deleteDrawing(item.id);
-    artworks.value = artworks.value.filter(a => a.id !== item.id);
+    await api.post(`/api/v1/ai-drawing/${item.id}/share`);
+    item.shared_to_gallery = true;
     ElMessage.success('作品已分享到画廊');
   } catch (error) {
     console.error('分享失败:', error);
@@ -99,11 +51,7 @@ async function handleShare(item) {
 
 async function handleDelete(item) {
   try {
-    if (item.source === 'server') {
-      await api.delete(`/api/v1/ai-drawing/${item.id}`);
-    } else {
-      await deleteDrawing(item.id);
-    }
+    await api.delete(`/api/v1/ai-drawing/${item.id}`);
     artworks.value = artworks.value.filter(a => a.id !== item.id);
     ElMessage.success('作品已删除');
   } catch (error) {
@@ -122,6 +70,21 @@ function handleReuseParams(item) {
     seed: item.seed,
   }));
   navigateTo('Studio');
+}
+
+function handleDownload(item) {
+  const url = buildImageUrl(item);
+  if (!url) {
+    ElMessage.warning('无法下载此图片');
+    return;
+  }
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `ai-artwork-${item.id}.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  ElMessage.success('图片下载已开始');
 }
 
 function loadMore() {
@@ -165,8 +128,11 @@ onActivated(() => {
             <el-button size="small" circle @click="handleReuseParams(item)" title="复用参数">
               <span>🔄</span>
             </el-button>
-            <el-button v-if="item.source === 'indexeddb'" size="small" type="success" circle @click="handleShare(item)" title="分享到画廊">
+            <el-button v-if="!item.shared_to_gallery" size="small" type="success" circle @click="handleShare(item)" title="分享到画廊">
               <span>📤</span>
+            </el-button>
+            <el-button size="small" circle @click="handleDownload(item)" title="下载">
+              <span>⬇</span>
             </el-button>
             <el-button size="small" type="danger" circle @click="handleDelete(item)" title="删除">
               <span>🗑</span>

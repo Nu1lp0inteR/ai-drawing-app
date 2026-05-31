@@ -9,6 +9,11 @@
           </div>
         </template>
         <el-form :model="params" label-position="top" @submit.prevent="handleSubmit">
+          <el-form-item label="模型选择">
+            <el-select v-model="params.model_name" style="width: 100%;">
+              <el-option v-for="m in availableModels" :key="m.key" :label="m.name" :value="m.key" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="主要提示词 (Prompt)">
             <el-input v-model="params.prompt" type="textarea" :rows="5" />
           </el-form-item>
@@ -97,6 +102,14 @@
               :icon="Download"
             >
               下载图片
+            </el-button>
+
+            <el-button 
+              type="success"
+              :loading="isLoading"
+              @click="handleSubmit"
+            >
+              再来一张 🎲
             </el-button>
           </div>
         </div>
@@ -226,7 +239,9 @@ const params = reactive({
   cfg: 6.0,
   sampler_name: 'euler_ancestral',
   seed: String(Math.floor(Math.random() * 1000000000000000)),
+  model_name: '',
 })
+const availableModels = ref([])
 const imageUrl = ref(null)
 const isLoading = ref(false)
 const progressStage = ref('')
@@ -307,6 +322,8 @@ const loadParametersFromStorage = () => {
     if (parsedParams.samplerName) params.sampler_name = parsedParams.samplerName;
     if (parsedParams.sampler_name) params.sampler_name = parsedParams.sampler_name;
     if (parsedParams.seed) params.seed = parsedParams.seed;
+    if (parsedParams.model_name) params.model_name = parsedParams.model_name;
+    if (parsedParams.modelName) params.model_name = parsedParams.modelName;
     
     sessionStorage.removeItem('prefillStudioParams');
     localStorage.removeItem('autoFillParams');
@@ -389,15 +406,33 @@ const cancelDrawing = () => {
   console.log('🔄 [Studio] 用户取消后已重置界面状态');
 };
 
+async function fetchAvailableModels() {
+  try {
+    const response = await api.get('/api/v1/ai-drawing/models');
+    availableModels.value = response.data.models || [];
+    if (availableModels.value.length > 0 && !params.model_name) {
+      params.model_name = availableModels.value[0].key;
+    }
+    console.log('📋 [Studio] 可用模型:', availableModels.value);
+  } catch (error) {
+    console.error('获取模型列表失败:', error);
+  }
+}
 
 
 onMounted(() => {
   loadParametersFromStorage()
   loadHistoryFromIndexedDB()
+  fetchAvailableModels()
 
   window.addEventListener('loadAutoFillParams', handleLoadAutoFillParams)
   window.addEventListener('clearHistory', handleClearHistoryEvent)
   window.addEventListener('drawingFailed', handleDrawingFailedEvent)
+})
+
+onActivated(() => {
+  loadParametersFromStorage()
+  fetchAvailableModels()
 })
 
 onActivated(() => {

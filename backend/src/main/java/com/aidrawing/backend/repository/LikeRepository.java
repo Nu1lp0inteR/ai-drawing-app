@@ -108,4 +108,8 @@ public interface LikeRepository extends JpaRepository<Like, String> {
      */
     @Query("SELECT l.drawing.id FROM Like l WHERE l.user.id = :userId AND l.drawing.id IN :drawingIds")
     List<String> findLikedDrawingIdsByUserAndDrawingIds(@Param("userId") String userId, @Param("drawingIds") List<String> drawingIds);
+
+    @Modifying
+    @Query("DELETE FROM Like l WHERE l.drawing.id = :drawingId")
+    void deleteByDrawingId(@Param("drawingId") String drawingId);
 }

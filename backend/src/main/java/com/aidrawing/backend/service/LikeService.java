@@ -13,11 +13,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +32,8 @@ public class LikeService {
 
     private static final Logger logger = LoggerFactory.getLogger(LikeService.class);
 
+    private static final String HOT_RANK_KEY = "rank:hot";
+
     @Autowired
     private LikeRepository likeRepository;
 
@@ -38,6 +42,9 @@ public class LikeService {
 
     @Autowired
     private DrawingRepository drawingRepository;
+
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
 
     /**
      * 点赞作品
@@ -65,6 +72,12 @@ public class LikeService {
 
         // 4. 获取最新的点赞数
         Long likesCount = likeRepository.countByDrawingId(drawingId);
+
+        try {
+            redisTemplate.opsForZSet().incrementScore(HOT_RANK_KEY, drawingId, 1);
+        } catch (Exception e) {
+            logger.warn("Failed to update hot rank ZSET: {}", e.getMessage());
+        }
 
         logger.info("✅ 点赞成功: userId={}, drawingId={}, 作品点赞数: {}", 
             userId, drawingId, likesCount);
@@ -99,6 +112,12 @@ public class LikeService {
 
         // 4. 获取最新的点赞数
         Long likesCount = likeRepository.countByDrawingId(drawingId);
+
+        try {
+            redisTemplate.opsForZSet().incrementScore(HOT_RANK_KEY, drawingId, -1);
+        } catch (Exception e) {
+            logger.warn("Failed to update hot rank ZSET: {}", e.getMessage());
+        }
 
         logger.info("✅ 取消点赞成功: userId={}, drawingId={}, 作品点赞数: {}", 
             userId, drawingId, likesCount);
@@ -236,5 +255,30 @@ public class LikeService {
         Long userLikesCount = likeRepository.countByUserId(userId); // 用户点赞了多少作品
         Long receivedLikesCount = likeRepository.countLikesReceivedByUserId(userId); // 用户作品获得多少点赞
         return new Long[]{userLikesCount, receivedLikesCount};
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getHotDrawingIds(long start, long end) {
+        try {
+            Set<String> ids = redisTemplate.opsForZSet().reverseRange(HOT_RANK_KEY, start, end);
+            if (ids == null || ids.isEmpty()) {
+                logger.info("Hot rank ZSET is empty, returning empty list");
+                return List.of();
+            }
+            return List.copyOf(ids);
+        } catch (Exception e) {
+            logger.warn("Failed to get hot ranking from Redis: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public Long getHotRankCount() {
+        try {
+            Long count = redisTemplate.opsForZSet().size(HOT_RANK_KEY);
+            return count != null ? count : 0L;
+        } catch (Exception e) {
+            return 0L;
+        }
     }
 }

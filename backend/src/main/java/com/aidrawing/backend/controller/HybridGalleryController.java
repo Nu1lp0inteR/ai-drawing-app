@@ -40,16 +40,30 @@ public class HybridGalleryController {
     }
 
     @GetMapping
-    @Cacheable(value = "galleryCache", key = "'publicGallery::page=' + #page + '::size=' + #size")
     public ResponseEntity<Map<String, Object>> getPublicGallery(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String model) {
 
-        logger.info("画廊查询: page={}, size={}", page, size);
+        logger.info("画廊查询: page={}, size={}, keyword={}, model={}", page, size, keyword, model);
 
         try {
             PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-            Page<Drawing> drawingPage = drawingRepository.findBySharedToGalleryTrueWithUserOrderByCreatedAtDesc(pageRequest);
+            Page<Drawing> drawingPage;
+
+            boolean hasKeyword = keyword != null && !keyword.isBlank();
+            boolean hasModel = model != null && !model.isBlank();
+
+            if (hasKeyword && hasModel) {
+                drawingPage = drawingRepository.searchByKeywordAndModel(keyword.trim(), model.trim(), pageRequest);
+            } else if (hasKeyword) {
+                drawingPage = drawingRepository.searchByKeyword(keyword.trim(), pageRequest);
+            } else if (hasModel) {
+                drawingPage = drawingRepository.findByModelName(model.trim(), pageRequest);
+            } else {
+                drawingPage = drawingRepository.findBySharedToGalleryTrueWithUserOrderByCreatedAtDesc(pageRequest);
+            }
 
             if (drawingPage.isEmpty()) {
                 logger.info("画廊为空");
@@ -128,5 +142,80 @@ public class HybridGalleryController {
     @CacheEvict(value = "galleryCache", allEntries = true)
     public void clearGalleryCache() {
         logger.info("画廊缓存已清除");
+    }
+
+    @GetMapping("/hot")
+    public ResponseEntity<Map<String, Object>> getHotGallery(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        logger.info("热门排行查询: page={}, size={}", page, size);
+
+        try {
+            long start = (long) page * size;
+            long end = start + size - 1;
+
+            List<String> hotIds = likeService.getHotDrawingIds(start, end);
+            Long totalCount = likeService.getHotRankCount();
+
+            if (hotIds.isEmpty()) {
+                return ResponseEntity.ok(Map.of(
+                    "content", List.of(),
+                    "page", page,
+                    "size", size,
+                    "totalElements", totalCount,
+                    "totalPages", (int) Math.ceil((double) totalCount / size)
+                ));
+            }
+
+            List<Drawing> drawings = drawingRepository.findAllById(hotIds);
+            Map<String, Drawing> drawingMap = drawings.stream()
+                .collect(Collectors.toMap(Drawing::getId, d -> d));
+
+            List<Drawing> orderedDrawings = hotIds.stream()
+                .filter(id -> {
+                    Drawing d = drawingMap.get(id);
+                    return d != null && d.isSharedToGallery();
+                })
+                .map(drawingMap::get)
+                .collect(Collectors.toList());
+
+            String currentUserId = jwtService.getCurrentUserId();
+            List<String> drawingIds = orderedDrawings.stream()
+                .map(Drawing::getId)
+                .collect(Collectors.toList());
+
+            List<LikeDto.LikeStatusResponse> likeStatuses = likeService.getBatchLikeStatus(currentUserId, drawingIds);
+            Map<String, LikeDto.LikeStatusResponse> likeStatusMap = likeStatuses.stream()
+                .collect(HashMap::new, (m, s) -> m.put(s.getDrawingId(), s), HashMap::putAll);
+
+            List<GalleryItemDto> content = orderedDrawings.stream().map(drawing -> {
+                GalleryItemDto dto = new GalleryItemDto(drawing);
+                LikeDto.LikeStatusResponse likeStatus = likeStatusMap.get(drawing.getId());
+                dto.setLikesCount(likeStatus != null ? likeStatus.getLikesCount() : 0L);
+                dto.setIsLiked(likeStatus != null && likeStatus.getIsLiked());
+                return dto;
+            }).collect(Collectors.toList());
+
+            logger.info("热门排行返回 {} 张作品", content.size());
+
+            return ResponseEntity.ok(Map.of(
+                "content", content,
+                "page", page,
+                "size", size,
+                "totalElements", totalCount,
+                "totalPages", (int) Math.ceil((double) totalCount / size)
+            ));
+
+        } catch (Exception e) {
+            logger.warn("热门排行查询失败: {}", e.getMessage());
+            return ResponseEntity.ok(Map.of(
+                "content", List.of(),
+                "page", page,
+                "size", size,
+                "totalElements", 0,
+                "totalPages", 0
+            ));
+        }
     }
 }
