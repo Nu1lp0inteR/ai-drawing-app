@@ -2,10 +2,6 @@ package com.aidrawing.backend.consumer;
 
 import com.aidrawing.backend.dto.ComfyUIWSMessage;
 import com.aidrawing.backend.dto.DrawingRequest;
-import com.aidrawing.backend.entity.Drawing;
-import com.aidrawing.backend.entity.User;
-import com.aidrawing.backend.repository.DrawingRepository;
-import com.aidrawing.backend.repository.UserRepository;
 import com.aidrawing.backend.service.ComfyUIService;
 import com.aidrawing.backend.service.CreditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,19 +9,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 @Component
@@ -36,27 +26,18 @@ public class DrawingTaskConsumer {
     private final ObjectMapper objectMapper;
     private final ComfyUIService comfyUIService;
     private final SimpMessagingTemplate messagingTemplate;
-    private final DrawingRepository drawingRepository;
-    private final UserRepository userRepository;
     private final CreditService creditService;
-
-    @Value("${file.storage.path}")
-    private String storagePath;
 
     @Autowired
     public DrawingTaskConsumer(
             ObjectMapper objectMapper,
             ComfyUIService comfyUIService,
             SimpMessagingTemplate messagingTemplate,
-            DrawingRepository drawingRepository,
-            UserRepository userRepository,
             CreditService creditService
     ) {
         this.objectMapper = objectMapper;
         this.comfyUIService = comfyUIService;
         this.messagingTemplate = messagingTemplate;
-        this.drawingRepository = drawingRepository;
-        this.userRepository = userRepository;
         this.creditService = creditService;
     }
 
@@ -86,11 +67,6 @@ public class DrawingTaskConsumer {
             pushMessage.put("seed", request.getSeed());
             pushMessage.put("image_base64", imageBase64);
             pushMessage.put("timestamp", java.time.LocalDateTime.now().toString());
-
-            String drawingId = persistDrawing(request, finalImageInfo, imageBytes);
-            if (drawingId != null) {
-                pushMessage.put("drawing_id", drawingId);
-            }
 
             messagingTemplate.convertAndSend("/topic/drawing_complete", pushMessage);
             logger.info("Task completed. Image base64 pushed to frontend (size: {} bytes)", imageBase64.length());
@@ -128,50 +104,6 @@ public class DrawingTaskConsumer {
             return "服务器出错了，请稍后再试";
         } else {
             return "图片生成遇到未知问题，请稍后重试";
-        }
-    }
-
-    private String persistDrawing(DrawingRequest request, ComfyUIWSMessage.ImageInfo imageInfo, byte[] imageBytes) {
-        try {
-            String storedFilename = UUID.randomUUID().toString() + ".png";
-            Path storageDir = Paths.get(storagePath);
-            Files.createDirectories(storageDir);
-            Files.write(storageDir.resolve(storedFilename), imageBytes);
-            logger.info("Image saved to storage: {}", storedFilename);
-
-            String userId = request.getUserId();
-            if (userId == null) {
-                logger.warn("No userId in DrawingRequest, skipping DB persist");
-                return null;
-            }
-
-            Optional<User> userOpt = userRepository.findById(userId);
-            if (userOpt.isEmpty()) {
-                logger.warn("User not found: {}, skipping DB persist", userId);
-                return null;
-            }
-
-            Drawing drawing = new Drawing();
-            drawing.setUser(userOpt.get());
-            drawing.setPrompt(request.getPrompt());
-            drawing.setNegativePrompt(request.getNegativePrompt());
-            drawing.setSteps(request.getSteps());
-            drawing.setCfg(request.getCfg());
-            drawing.setSamplerName(request.getSamplerName());
-            drawing.setSeed(request.getSeed());
-            drawing.setModelName(request.getModelName());
-            drawing.setStoredFilename(storedFilename);
-            drawing.setOriginalFilename(imageInfo.getFilename());
-            drawing.setFileType("image/png");
-            drawing.setSharedToGallery(false);
-
-            Drawing savedDrawing = drawingRepository.save(drawing);
-            logger.info("Drawing persisted: id={}, userId={}, sharedToGallery=false", savedDrawing.getId(), userId);
-            return savedDrawing.getId();
-
-        } catch (Exception e) {
-            logger.error("Failed to persist drawing to database (image still delivered to frontend):", e);
-            return null;
         }
     }
 }
