@@ -8,7 +8,7 @@
 -->
 
 <script setup>
-import { ref, computed, watch, inject } from 'vue'
+import { ref, computed, watch, inject, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 
@@ -20,18 +20,18 @@ const props = defineProps({
   // 是否显示模态框
   visible: {
     type: Boolean,
-    default: false
+    default: false,
   },
   // 作品ID - 如果提供了ID，会自动获取详情
   artworkId: {
     type: String,
-    default: ''
+    default: '',
   },
   // 直接传入的作品数据 - 如果已有数据，可直接使用
   artwork: {
     type: Object,
-    default: null
-  }
+    default: null,
+  },
 })
 
 // Emits定义 - 父组件通信
@@ -45,19 +45,58 @@ const imageLoading = ref(true)
 // 计算属性
 const dialogVisible = computed({
   get: () => props.visible,
-  set: (value) => emit('update:visible', value)
+  set: (value) => emit('update:visible', value),
 })
 
-// 获取图片URL
-const getImageUrl = (filename) => {
-  if (!filename) return ''
-  return `/api/v1/images/${filename}`
+const blobUrlCache = new Map()
+
+const imageSrc = computed(() => {
+  const data = artworkData.value || props.artwork
+  if (!data) return ''
+
+  if (data.storedFilename) {
+    return `/api/v1/images/${data.storedFilename}`
+  }
+
+  if (data.imageUrl) {
+    return data.imageUrl
+  }
+
+  if (data.imageBase64) {
+    if (blobUrlCache.has('current')) return blobUrlCache.get('current')
+    try {
+      const byteChars = atob(data.imageBase64)
+      const byteArrays = new Uint8Array(byteChars.length)
+      for (let i = 0; i < byteChars.length; i++) {
+        byteArrays[i] = byteChars.charCodeAt(i)
+      }
+      const blob = new Blob([byteArrays], { type: 'image/png' })
+      const url = URL.createObjectURL(blob)
+      blobUrlCache.set('current', url)
+      return url
+    } catch {
+      // fallback to empty
+    }
+  }
+
+  return ''
+})
+
+function revokeBlobUrl() {
+  if (blobUrlCache.has('current')) {
+    URL.revokeObjectURL(blobUrlCache.get('current'))
+    blobUrlCache.clear()
+  }
 }
+
+onUnmounted(() => {
+  revokeBlobUrl()
+})
 
 // 获取作品详情 - 企业级错误处理和用户体验
 const fetchArtworkDetails = async (id) => {
   if (!id) return
-  
+
   try {
     loading.value = true
     const response = await api.get(`/api/v1/ai-drawing/${id}`)
@@ -80,42 +119,75 @@ const fetchArtworkDetails = async (id) => {
 const copyParameters = () => {
   const currentArtwork = artworkData.value || props.artwork
   if (!currentArtwork) return
-  
+
   const params = {
     prompt: currentArtwork.prompt || '',
     negativePrompt: currentArtwork.negativePrompt || '',
     steps: currentArtwork.steps || 20,
     cfg: currentArtwork.cfg || 7.0,
     samplerName: currentArtwork.samplerName || 'Euler',
-    seed: currentArtwork.seed || ''
+    seed: currentArtwork.seed || '',
   }
-  
+
   emit('copy-params', params)
   ElMessage.success('参数已复制！即将跳转到创作中心')
   dialogVisible.value = false
 }
 
 function downloadImage() {
-  if (!artworkData.value?.storedFilename) {
-    ElMessage.warning('没有可下载的图片');
-    return;
+  const data = artworkData.value || props.artwork
+  if (!data) {
+    ElMessage.warning('没有可下载的图片')
+    return
   }
-  const link = document.createElement('a');
-  link.href = getImageUrl(artworkData.value.storedFilename);
-  link.download = artworkData.value.storedFilename;
-  link.click();
+
+  let url
+  let filename
+
+  if (data.storedFilename) {
+    url = `/api/v1/images/${data.storedFilename}`
+    filename = data.storedFilename
+  } else if (data.imageBase64) {
+    try {
+      const byteChars = atob(data.imageBase64)
+      const byteArrays = new Uint8Array(byteChars.length)
+      for (let i = 0; i < byteChars.length; i++) {
+        byteArrays[i] = byteChars.charCodeAt(i)
+      }
+      const blob = new Blob([byteArrays], { type: 'image/png' })
+      url = URL.createObjectURL(blob)
+      filename = 'artwork.png'
+    } catch {
+      ElMessage.warning('图片数据无效')
+      return
+    }
+  } else if (data.imageUrl) {
+    url = data.imageUrl
+    filename = 'artwork.png'
+  } else {
+    ElMessage.warning('没有可下载的图片')
+    return
+  }
+
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
 }
 
 function copyPromptText() {
   if (!artworkData.value?.prompt) {
-    ElMessage.warning('没有可复制的提示词');
-    return;
+    ElMessage.warning('没有可复制的提示词')
+    return
   }
-  navigator.clipboard.writeText(artworkData.value.prompt).then(() => {
-    ElMessage.success('提示词已复制到剪贴板');
-  }).catch(() => {
-    ElMessage.error('复制失败');
-  });
+  navigator.clipboard
+    .writeText(artworkData.value.prompt)
+    .then(() => {
+      ElMessage.success('提示词已复制到剪贴板')
+    })
+    .catch(() => {
+      ElMessage.error('复制失败')
+    })
 }
 
 const comments = ref([])
@@ -130,15 +202,18 @@ async function fetchComments(reset = false) {
   const drawingId = (artworkData.value || props.artwork)?.id
   if (!drawingId) return
 
-  if (reset) { commentPage.value = 0; comments.value = [] }
+  if (reset) {
+    commentPage.value = 0
+    comments.value = []
+  }
   commentsLoading.value = true
 
   try {
     const response = await api.get(`/api/v1/comments/drawings/${drawingId}`, {
-      params: { page: commentPage.value, size: commentPageSize }
+      params: { page: commentPage.value, size: commentPageSize },
     })
     const data = response.data
-    comments.value = reset ? (data.comments || []) : [...comments.value, ...(data.comments || [])]
+    comments.value = reset ? data.comments || [] : [...comments.value, ...(data.comments || [])]
     commentTotalPages.value = data.total_pages || 0
   } catch (error) {
     console.error('获取评论失败:', error)
@@ -153,7 +228,7 @@ async function submitComment() {
   try {
     await api.post('/api/v1/comments', {
       drawing_id: (artworkData.value || props.artwork).id,
-      content: newCommentText.value.trim()
+      content: newCommentText.value.trim(),
     })
     newCommentText.value = ''
     ElMessage.success('评论发表成功')
@@ -168,7 +243,7 @@ async function submitComment() {
 async function deleteCommentItem(commentId) {
   try {
     await api.delete(`/api/v1/comments/${commentId}`)
-    comments.value = comments.value.filter(c => c.id !== commentId)
+    comments.value = comments.value.filter((c) => c.id !== commentId)
     ElMessage.success('评论已删除')
   } catch (error) {
     ElMessage.error(error.response?.data?.message || '删除失败')
@@ -190,9 +265,9 @@ async function handleDelete() {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
       type: 'warning',
-    });
+    })
   } catch {
-    return;
+    return
   }
   try {
     await api.delete(`/api/v1/ai-drawing/${drawingId}`)
@@ -214,7 +289,7 @@ const formatDate = (dateString) => {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   })
 }
 
@@ -250,13 +325,13 @@ const handleImageError = () => {
     width="900px"
     :close-on-click-modal="false"
     class="artwork-detail-modal"
-    @close="imageLoading = true"
+    @close="imageLoading = true; revokeBlobUrl()"
   >
     <!-- 加载状态 -->
     <div v-if="loading" class="loading-container">
       <el-skeleton :rows="8" animated />
     </div>
-    
+
     <!-- 主要内容 -->
     <div v-else-if="artworkData || artwork" class="artwork-detail-content">
       <el-row :gutter="24">
@@ -264,17 +339,17 @@ const handleImageError = () => {
         <el-col :xs="24" :md="12">
           <div class="image-container">
             <el-image
-              :src="getImageUrl((artworkData || artwork).storedFilename)"
+              :src="imageSrc"
               fit="contain"
               class="artwork-image"
-              :preview-src-list="[getImageUrl((artworkData || artwork).storedFilename)]"
+              :preview-src-list="[imageSrc]"
               preview-teleported
               @load="handleImageLoad"
               @error="handleImageError"
             >
               <template #placeholder>
                 <div class="image-loading">
-                  <el-skeleton-item variant="image" style="width: 100%; height: 100%;" />
+                  <el-skeleton-item variant="image" style="width: 100%; height: 100%" />
                 </div>
               </template>
               <template #error>
@@ -286,12 +361,12 @@ const handleImageError = () => {
             </el-image>
           </div>
         </el-col>
-        
+
         <!-- 右侧：参数详情 -->
         <el-col :xs="24" :md="12">
           <div class="params-container">
             <h3 class="section-title">生成参数</h3>
-            
+
             <!-- 提示词 -->
             <el-form-item label="正向提示词：" class="param-item">
               <el-input
@@ -302,9 +377,9 @@ const handleImageError = () => {
                 class="readonly-input"
               />
             </el-form-item>
-            
+
             <!-- 负向提示词 -->
-            <el-form-item 
+            <el-form-item
               v-if="(artworkData || artwork).negativePrompt"
               label="负向提示词："
               class="param-item"
@@ -317,40 +392,44 @@ const handleImageError = () => {
                 class="readonly-input"
               />
             </el-form-item>
-            
+
             <!-- 技术参数网格 -->
             <div class="tech-params-grid">
               <div class="param-group">
                 <label>采样步数</label>
                 <span class="param-value">{{ (artworkData || artwork).steps || '-' }}</span>
               </div>
-              
+
               <div class="param-group">
                 <label>CFG Scale</label>
                 <span class="param-value">{{ (artworkData || artwork).cfg || '-' }}</span>
               </div>
-              
+
               <div class="param-group">
                 <label>采样器</label>
                 <span class="param-value">{{ (artworkData || artwork).samplerName || '-' }}</span>
               </div>
-              
+
               <div class="param-group">
                 <label>随机种子</label>
                 <span class="param-value">{{ (artworkData || artwork).seed || '-' }}</span>
               </div>
             </div>
-            
+
             <!-- 元数据信息 -->
             <div class="metadata-section">
               <h4 class="subsection-title">作品信息</h4>
               <div class="metadata-item">
                 <span class="metadata-label">创建时间：</span>
-                <span class="metadata-value">{{ formatDate((artworkData || artwork).createdAt) }}</span>
+                <span class="metadata-value">{{
+                  formatDate((artworkData || artwork).createdAt)
+                }}</span>
               </div>
               <div class="metadata-item">
                 <span class="metadata-label">文件类型：</span>
-                <span class="metadata-value">{{ (artworkData || artwork).fileType || 'image/png' }}</span>
+                <span class="metadata-value">{{
+                  (artworkData || artwork).fileType || 'image/png'
+                }}</span>
               </div>
               <div class="metadata-item">
                 <span class="metadata-label">作品ID：</span>
@@ -422,27 +501,21 @@ const handleImageError = () => {
         </div>
       </div>
     </div>
-    
+
     <!-- 错误状态 -->
     <div v-else class="error-container">
       <el-empty description="作品数据加载失败" />
     </div>
-    
+
     <!-- 底部操作按钮 -->
     <template #footer>
       <div class="dialog-footer">
         <el-button @click="dialogVisible = false">关闭</el-button>
-        <el-button @click="downloadImage">
-          下载原图
-        </el-button>
-        <el-button @click="copyPromptText">
-          复制提示词
-        </el-button>
-        <el-button type="primary" @click="copyParameters">
-          复用参数到创作中心
-        </el-button>
+        <el-button @click="downloadImage"> 下载原图 </el-button>
+        <el-button @click="copyPromptText"> 复制提示词 </el-button>
+        <el-button type="primary" @click="copyParameters"> 复用参数到创作中心 </el-button>
         <el-button
-          v-if="userInfo && userInfo.id === ((artworkData || artwork)?.authorId)"
+          v-if="userInfo && userInfo.id === (artworkData || artwork)?.authorId"
           type="danger"
           @click="handleDelete"
         >
@@ -604,16 +677,16 @@ const handleImageError = () => {
     padding-left: 0;
     margin-top: 20px;
   }
-  
+
   .tech-params-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .artwork-detail-modal :deep(.el-dialog) {
     width: 95vw !important;
     margin: 5vh auto !important;
   }
-  
+
   .artwork-detail-content {
     max-height: 80vh;
   }
@@ -715,5 +788,3 @@ const handleImageError = () => {
   font-size: 13px;
 }
 </style>
-
-

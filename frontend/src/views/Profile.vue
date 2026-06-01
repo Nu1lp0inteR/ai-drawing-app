@@ -62,9 +62,9 @@
             </el-tag>
           </div>
           <div class="header-right">
-            <el-button 
-              type="primary" 
-              size="small" 
+            <el-button
+              type="primary"
+              size="small"
               @click="refreshArtworks"
               :loading="loading"
               :icon="Refresh"
@@ -78,62 +78,62 @@
       <!-- 作品网格 -->
       <div v-loading="loading" class="artworks-content">
         <div v-if="artworkList.artworks.length === 0" class="empty-state">
-          <el-icon :size="60" style="color: #c0c4cc;"><Picture /></el-icon>
-          <p style="color: #909399; margin-top: 15px;">还没有创作作品</p>
+          <el-icon :size="60" style="color: #c0c4cc"><Picture /></el-icon>
+          <p style="color: #909399; margin-top: 15px">还没有创作作品</p>
           <el-button type="primary" @click="goToStudio">开始创作</el-button>
         </div>
-        
+
         <div v-else class="artworks-grid">
-          <div 
-            v-for="artwork in artworkList.artworks" 
-            :key="artwork.id"
-            class="artwork-card"
-          >
+          <div v-for="artwork in artworkList.artworks" :key="artwork.id" class="artwork-card">
             <!-- 图片 -->
             <div class="artwork-image-container">
-              <img 
-                :src="artwork.imageUrl || `/api/v1/images/${artwork.storedFilename}`" 
+              <img
+                :src="getImageSrc(artwork)"
                 :alt="artwork.prompt"
                 class="artwork-image"
                 @error="handleImageError"
               />
-              
+
               <!-- 分享状态标识 -->
               <div v-if="artwork.sharedToGallery" class="shared-badge">
                 <el-icon><Share /></el-icon>
                 <span>已分享</span>
               </div>
-              
+
               <div class="artwork-overlay">
-                <el-button 
-                  type="primary" 
-                  size="small" 
+                <el-button
+                  type="primary"
+                  size="small"
                   @click="viewArtworkDetail(artwork)"
                   :icon="View"
                   circle
                 />
-                <el-button 
-                  type="success" 
-                  size="small" 
+                <el-button
+                  type="success"
+                  size="small"
                   @click="toggleSharing(artwork)"
                   :icon="Share"
                   circle
-                  :class="{ 'shared': artwork.sharedToGallery }"
+                  :class="{ shared: artwork.sharedToGallery }"
                 />
-                <el-button 
-                  type="danger" 
-                  size="small" 
+                <el-button
+                  type="danger"
+                  size="small"
                   @click="confirmDelete(artwork)"
                   :icon="Delete"
                   circle
                 />
               </div>
             </div>
-            
+
             <!-- 作品信息 -->
             <div class="artwork-info">
               <div class="artwork-prompt">
-                {{ artwork.prompt.length > 50 ? artwork.prompt.substring(0, 50) + '...' : artwork.prompt }}
+                {{
+                  artwork.prompt.length > 50
+                    ? artwork.prompt.substring(0, 50) + '...'
+                    : artwork.prompt
+                }}
               </div>
               <div class="artwork-meta">
                 <el-tag size="small" type="info">{{ artwork.samplerName }}</el-tag>
@@ -160,30 +160,22 @@
     </el-card>
 
     <!-- 作品详情弹窗 -->
-    <ArtworkDetailModal 
-      v-model:visible="detailModalVisible"
-      :artwork="selectedArtwork"
-    />
+    <ArtworkDetailModal v-model:visible="detailModalVisible" :artwork="selectedArtwork" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, inject, onMounted, onUnmounted, computed } from 'vue'
+import { ref, reactive, inject, onMounted, onActivated, onUnmounted, computed } from 'vue'
 import api from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { 
-  UserFilled, 
-  Picture, 
-  Refresh, 
-  View, 
-  Share, 
-  Delete,
-  Coin
-} from '@element-plus/icons-vue'
+import { UserFilled, Picture, Refresh, View, Share, Delete, Coin } from '@element-plus/icons-vue'
 import ArtworkDetailModal from '../components/ArtworkDetailModal.vue'
 import { getAllDrawings, deleteDrawing as deleteFromDB } from '../utils/indexedDB.js'
 
 const userInfo = inject('userInfo')
+const creditsBalance = inject('creditsBalance')
+const todaySignedIn = inject('todaySignedIn')
+const fetchCredits = inject('fetchCredits')
 const navigateToFollowingList = inject('navigateToFollowingList')
 const navigateToFollowersList = inject('navigateToFollowersList')
 
@@ -201,22 +193,14 @@ const detailModalVisible = ref(false)
 const selectedArtwork = ref(null)
 
 const isSmallScreen = ref(false)
-const checkScreenSize = () => { isSmallScreen.value = window.innerWidth <= 768 }
-const paginationLayout = computed(() => isSmallScreen.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper')
-
-const creditsBalance = ref(0)
-const todaySignedIn = ref(false)
-const signingIn = ref(false)
-
-async function fetchCredits() {
-  try {
-    const response = await api.get('/api/v1/credits/balance')
-    creditsBalance.value = response.data.balance || 0
-    todaySignedIn.value = response.data.today_signed_in || false
-  } catch (error) {
-    console.error('获取积分信息失败:', error)
-  }
+const checkScreenSize = () => {
+  isSmallScreen.value = window.innerWidth <= 768
 }
+const paginationLayout = computed(() =>
+  isSmallScreen.value ? 'prev, pager, next' : 'total, sizes, prev, pager, next, jumper',
+)
+
+const signingIn = ref(false)
 
 async function handleSignIn() {
   signingIn.value = true
@@ -234,7 +218,6 @@ async function handleSignIn() {
 
 async function fetchProfileHome() {
   try {
-
     // 从 IndexedDB 加载本地作品
     const localDrawings = await getAllDrawings()
     artworkList.artworks = localDrawings.map((d) => ({
@@ -256,9 +239,7 @@ async function fetchProfileHome() {
 
     // 从后端获取统计数据（关注/粉丝数）
     try {
-      const response = await api.get('/api/v1/profile/stats', {
-        
-      })
+      const response = await api.get('/api/v1/profile/stats', {})
       stats.value = response.data
       stats.value.totalArtworks = localDrawings.length
     } catch (statsErr) {
@@ -332,7 +313,7 @@ const confirmDelete = async (artwork) => {
         confirmButtonText: '删除',
         cancelButtonText: '取消',
         type: 'warning',
-      }
+      },
     )
     await deleteArtwork(artwork)
   } catch (error) {
@@ -347,12 +328,10 @@ const deleteArtwork = async (artwork) => {
     if (artwork.isLocal) {
       await deleteFromDB(artwork.id)
     } else {
-      await api.delete(`/api/v1/profile/artworks/${artwork.id}`, {
-        
-      })
+      await api.delete(`/api/v1/profile/artworks/${artwork.id}`, {})
     }
 
-    const index = artworkList.artworks.findIndex(item => item.id === artwork.id)
+    const index = artworkList.artworks.findIndex((item) => item.id === artwork.id)
     if (index !== -1) {
       artworkList.artworks.splice(index, 1)
       artworkList.totalCount--
@@ -376,7 +355,6 @@ const toggleSharing = async (artwork) => {
       return
     }
 
-
     let imageBlob
     if (artwork.imageBase64) {
       const byteString = atob(artwork.imageBase64)
@@ -393,17 +371,20 @@ const toggleSharing = async (artwork) => {
 
     const formData = new FormData()
     formData.append('image', imageBlob, 'artwork.png')
-    formData.append('params', JSON.stringify({
-      prompt: artwork.prompt,
-      negative_prompt: artwork.negativePrompt,
-      steps: artwork.steps,
-      cfg: artwork.cfg,
-      sampler_name: artwork.samplerName,
-      seed: artwork.seed,
-    }))
+    formData.append(
+      'params',
+      JSON.stringify({
+        prompt: artwork.prompt,
+        negative_prompt: artwork.negativePrompt,
+        steps: artwork.steps,
+        cfg: artwork.cfg,
+        sampler_name: artwork.samplerName,
+        seed: artwork.seed,
+      }),
+    )
 
     await api.post('/api/v1/ai-drawing/share', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
     })
 
     artwork.sharedToGallery = true
@@ -440,7 +421,7 @@ const formatTime = (dateString) => {
   const now = new Date()
   const diffMs = now - date
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  
+
   if (diffDays === 0) return '今天'
   if (diffDays === 1) return '昨天'
   if (diffDays < 7) return `${diffDays}天前`
@@ -448,8 +429,40 @@ const formatTime = (dateString) => {
 }
 
 // 处理图片加载错误
+const blobUrlCache = new Map()
+
+function getImageSrc(artwork) {
+  if (blobUrlCache.has(artwork.id)) return blobUrlCache.get(artwork.id)
+
+  if (artwork.imageBase64) {
+    try {
+      const byteChars = atob(artwork.imageBase64)
+      const byteArrays = new Uint8Array(byteChars.length)
+      for (let i = 0; i < byteChars.length; i++) {
+        byteArrays[i] = byteChars.charCodeAt(i)
+      }
+      const blob = new Blob([byteArrays], { type: 'image/png' })
+      const blobUrl = URL.createObjectURL(blob)
+      blobUrlCache.set(artwork.id, blobUrl)
+      return blobUrl
+    } catch {
+      // fallback to data URI
+    }
+  }
+
+  return artwork.imageUrl || `/api/v1/images/${artwork.storedFilename}`
+}
+
+function revokeAllBlobUrls() {
+  for (const url of blobUrlCache.values()) {
+    URL.revokeObjectURL(url)
+  }
+  blobUrlCache.clear()
+}
+
 const handleImageError = (event) => {
-  event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfkuI3lrZjlnKg8L3RleHQ+PC9zdmc+'
+  event.target.src =
+    'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfkuI3lrZjlnKg8L3RleHQ+PC9zdmc+'
 }
 
 // 跳转到创作中心
@@ -484,14 +497,14 @@ const handleNewDrawingEvent = () => {
 // 监听用户登出事件，清理数据
 const handleLogoutEvent = () => {
   console.log('🚪 [Profile] 监听到用户登出，清理个人中心数据')
-  // 清理所有数据
+  revokeAllBlobUrls()
   stats.value = null
   artworkList.artworks = []
   artworkList.totalCount = 0
   artworkList.currentPage = 0
   artworkList.totalPages = 0
   currentPage.value = 1
-  
+
   // 关闭弹窗
   detailModalVisible.value = false
   selectedArtwork.value = null
@@ -501,7 +514,7 @@ const handleLogoutEvent = () => {
 const handleFollowStatusChange = (event) => {
   const { type, source } = event.detail
   console.log(`📡 [Profile] 收到关注状态变化: ${type}, source: ${source}`)
-  
+
   // 当前用户进行关注/取消关注操作时，更新自己的关注数
   if (stats.value && (source === 'UserProfile' || source === 'FollowingList')) {
     if (type === 'follow') {
@@ -517,30 +530,39 @@ const handleFollowStatusChange = (event) => {
 // --- 生命周期 ---
 onMounted(() => {
   console.log('🚀 [Profile] 组件开始挂载')
-  
+
   // 检查用户是否已登录
   const userInfoData = localStorage.getItem('userInfo')
-  
+
   if (!userInfoData) {
     console.warn('⚠️ [Profile] 用户未登录，跳过数据加载')
     ElMessage.warning('请先登录')
     return
   }
-  
+
   try {
     fetchProfileHome()
     fetchUserArtworks()
-    
+
     // 注册事件监听器
     window.addEventListener('drawingCompleted', handleNewDrawingEvent)
     window.addEventListener('userLogout', handleLogoutEvent)
     window.addEventListener('followStatusChange', handleFollowStatusChange)
     checkScreenSize()
     window.addEventListener('resize', checkScreenSize)
-    
+
     console.log('✅ [Profile] 组件挂载完成')
   } catch (error) {
     console.error('❌ [Profile] 组件挂载失败:', error)
+  }
+})
+
+onActivated(() => {
+  console.log('🔄 [Profile] 组件重新激活，刷新数据')
+  const userInfoData = localStorage.getItem('userInfo')
+  if (userInfoData) {
+    fetchProfileHome()
+    fetchUserArtworks()
   }
 })
 
@@ -549,6 +571,7 @@ onUnmounted(() => {
   window.removeEventListener('drawingCompleted', handleNewDrawingEvent)
   window.removeEventListener('userLogout', handleLogoutEvent)
   window.removeEventListener('followStatusChange', handleFollowStatusChange)
+  revokeAllBlobUrls()
 })
 </script>
 

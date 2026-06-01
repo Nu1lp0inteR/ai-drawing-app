@@ -55,6 +55,9 @@ public class GalleryItemDto {
     @JsonProperty("isLiked")
     private Boolean isLiked;
 
+    @JsonProperty("modelName")
+    private String modelName;
+
     // 默认构造函数
     public GalleryItemDto() {}
 
@@ -70,6 +73,7 @@ public class GalleryItemDto {
         this.storedFilename = drawing.getStoredFilename();
         this.sharedToGallery = drawing.isSharedToGallery();
         this.createdAt = drawing.getCreatedAt();
+        this.modelName = drawing.getModelName();
         
         // 设置作者信息
         if (drawing.getUser() != null) {
@@ -192,5 +196,13 @@ public class GalleryItemDto {
 
     public void setIsLiked(Boolean isLiked) {
         this.isLiked = isLiked;
+    }
+
+    public String getModelName() {
+        return modelName;
+    }
+
+    public void setModelName(String modelName) {
+        this.modelName = modelName;
     }
 }

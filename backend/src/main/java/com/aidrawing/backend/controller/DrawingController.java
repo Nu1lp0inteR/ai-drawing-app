@@ -160,6 +160,7 @@ public class DrawingController {
             drawing.setOriginalFilename(imageFile.getOriginalFilename());
             drawing.setFileType(imageFile.getContentType());
             drawing.setSharedToGallery(true);
+            drawing.setModelName(params.getModelName());
 
             User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("用户不存在: " + userId));

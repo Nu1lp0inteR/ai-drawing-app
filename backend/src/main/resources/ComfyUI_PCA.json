@@ -86,13 +86,15 @@
   },
   "82": {
     "inputs": {
-      "ckpt_name": "model.safetensors",
+      "ckpt_name": "PCA-TV.safetensors",
       "vae_name": "Baked VAE",
       "clip_skip": -2,
       "lora_name": "None",
       "lora_model_strength": 0.85,
       "lora_clip_strength": 0.85,
-      "positive": "",
+      "positive": [
+        "295",
+        0],
       "negative": [
         "297",
         0

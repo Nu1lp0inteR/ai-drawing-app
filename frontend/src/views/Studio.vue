@@ -1,7 +1,7 @@
 <template>
   <el-container class="studio-container">
     <el-aside width="400px" class="aside-panel">
-      <el-card shadow="always" style="height: 100%;">
+      <el-card shadow="always" style="height: 100%">
         <template #header>
           <div class="card-header">
             <el-icon><MagicStick /></el-icon>
@@ -18,13 +18,18 @@
             </el-button>
           </div>
         </template>
-        <el-form v-show="!paramsCollapsed || !isMobileView" :model="params" label-position="top" @submit.prevent="handleSubmit">
+        <el-form
+          v-show="!paramsCollapsed || !isMobileView"
+          :model="params"
+          label-position="top"
+          @submit.prevent="handleSubmit"
+        >
           <el-form-item label="模型选择">
-            <el-select v-model="params.model_name" style="width: 100%;">
+            <el-select v-model="params.model_name" style="width: 100%">
               <el-option v-for="m in availableModels" :key="m.key" :label="m.name" :value="m.key" />
             </el-select>
           </el-form-item>
-          <el-form-item label="主要提示词 (Prompt)">
+          <el-form-item label="正向提示词 (Prompt)">
             <el-input v-model="params.prompt" type="textarea" :rows="5" />
           </el-form-item>
           <el-form-item label="反向提示词 (Negative Prompt)">
@@ -33,13 +38,18 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="采样步数">
-                <el-input-number v-model="params.steps" :min="1" :max="100" style="width: 100%;" />
+                <el-input-number v-model="params.steps" :min="1" :max="100" style="width: 100%" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item label="采样器">
-                <el-select v-model="params.sampler_name" style="width: 100%;">
-                  <el-option v-for="item in samplerOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-select v-model="params.sampler_name" style="width: 100%">
+                  <el-option
+                    v-for="item in samplerOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -58,34 +68,38 @@
             </el-input>
           </el-form-item>
           <el-form-item>
-                      <el-button 
-            type="primary" 
-            native-type="submit" 
-            :loading="isLoading" 
-            :icon="Promotion" 
-            style="width: 100%;"
-            :disabled="isLoading"
-          >
-            {{ isLoading ? progressStage || '生成中...' : '开始生成' }}
-          </el-button>
-          
-          <!-- 取消按钮，仅在生成中显示 -->
-          <el-button 
-            v-if="isLoading"
-            type="danger" 
-            @click="cancelDrawing"
-            style="width: 100%; margin-top: 10px;"
-            plain
-          >
-            停止等待 (后台仍在处理)
-          </el-button>
+            <el-button
+              type="primary"
+              native-type="submit"
+              :loading="isLoading"
+              :icon="Promotion"
+              style="width: 100%"
+              :disabled="isLoading"
+            >
+              {{ isLoading ? progressStage || '生成中...' : '开始生成' }}
+            </el-button>
+
+            <!-- 取消按钮，仅在生成中显示 -->
+            <el-button
+              v-if="isLoading"
+              type="danger"
+              @click="cancelDrawing"
+              style="width: 100%; margin-top: 10px"
+              plain
+            >
+              停止等待 (后台仍在处理)
+            </el-button>
           </el-form-item>
         </el-form>
       </el-card>
     </el-aside>
-    
+
     <el-main class="main-content">
-      <div class="image-container" v-loading="isLoading" :element-loading-text="progressStage || '正在生成中...'">
+      <div
+        class="image-container"
+        v-loading="isLoading"
+        :element-loading-text="progressStage || '正在生成中...'"
+      >
         <div v-if="!imageUrl && !isLoading" class="placeholder">
           <el-icon :size="60"><IconPicture /></el-icon>
           <p>生成的图片将在这里显示</p>
@@ -106,46 +120,31 @@
               </div>
             </template>
           </el-image>
-          
+
           <!-- 图片操作区域 -->
-          <div class="image-actions">
-            <el-button 
-              type="primary" 
-              :loading="isSharing"
-              @click="shareToGallery"
-              :icon="Share"
-            >
+          <div v-if="isLoggedIn" class="image-actions">
+            <el-button type="primary" :loading="isSharing" @click="shareToGallery" :icon="Share">
               {{ isSharing ? '分享中...' : '分享到画廊' }}
             </el-button>
-            
-            <el-button 
-              type="default"
-              @click="downloadImage"
-              :icon="Download"
-            >
-              下载图片
-            </el-button>
 
-            <el-button 
-              type="success"
-              :loading="isLoading"
-              @click="handleSubmit"
-            >
+            <el-button type="default" @click="downloadImage" :icon="Download"> 下载图片 </el-button>
+
+            <el-button type="success" :loading="isLoading" @click="handleSubmit">
               再来一张 🎲
             </el-button>
           </div>
         </div>
         <div v-if="!isLoggedIn" class="login-prompt">
-            <el-icon :size="60"><Lock /></el-icon>
-            <p>登录后即可开始您的创作之旅</p>
-            <el-button type="primary" @click="showAuthDialog">立即登录</el-button>
+          <el-icon :size="60"><Lock /></el-icon>
+          <p>登录后即可开始您的创作之旅</p>
+          <el-button type="primary" @click="showAuthDialog">立即登录</el-button>
         </div>
       </div>
     </el-main>
 
     <!-- 右侧：历史图片区域 -->
     <el-aside width="300px" class="history-panel">
-      <el-card shadow="always" style="height: 100%;">
+      <el-card shadow="always" style="height: 100%">
         <template #header>
           <div class="card-header">
             <el-icon><Clock /></el-icon>
@@ -160,12 +159,12 @@
             >
               {{ historyCollapsed ? '展开' : '收起' }}
             </el-button>
-            <el-button 
-              type="text" 
-              size="small" 
+            <el-button
+              type="text"
+              size="small"
               @click="clearHistory"
               v-if="historyImages.length > 0"
-              style="float: right; padding: 0; color: #909399;"
+              style="float: right; padding: 0; color: #909399"
             >
               清空
             </el-button>
@@ -173,12 +172,12 @@
         </template>
         <div v-show="!historyCollapsed || !isMobileView" class="history-content">
           <div v-if="historyImages.length === 0" class="history-empty">
-            <el-icon :size="40" style="color: #c0c4cc;"><IconPicture /></el-icon>
-            <p style="color: #909399; margin-top: 10px;">暂无历史记录</p>
+            <el-icon :size="40" style="color: #c0c4cc"><IconPicture /></el-icon>
+            <p style="color: #909399; margin-top: 10px">暂无历史记录</p>
           </div>
           <div v-else class="history-grid">
-            <div 
-              v-for="(item, index) in historyImages" 
+            <div
+              v-for="(item, index) in historyImages"
               :key="item.id"
               class="history-item"
               @click="loadHistoryItem(item)"
@@ -186,17 +185,17 @@
             >
               <img :src="item.imageUrl" :alt="`历史图片 ${index + 1}`" class="history-image" />
               <div class="history-overlay">
-                <el-button 
-                  type="primary" 
-                  :icon="View" 
-                  size="small" 
-                  circle 
+                <el-button
+                  type="primary"
+                  :icon="View"
+                  size="small"
+                  circle
                   @click="previewHistoryImage(item, $event)"
                   title="预览大图"
-                  style="margin-right: 8px;"
+                  style="margin-right: 8px"
                 />
                 <el-icon><MagicStick /></el-icon>
-                <span style="font-size: 12px; margin-left: 4px;">加载参数</span>
+                <span style="font-size: 12px; margin-left: 4px">加载参数</span>
               </div>
               <div class="history-time">{{ formatTime(item.createdAt) }}</div>
             </div>
@@ -207,9 +206,9 @@
   </el-container>
 
   <!-- 图片预览对话框 -->
-  <el-dialog 
-    v-model="previewDialogVisible" 
-    title="图片预览" 
+  <el-dialog
+    v-model="previewDialogVisible"
+    title="图片预览"
     :width="isMobileView ? '95%' : '80%'"
     :show-close="true"
     center
@@ -257,7 +256,18 @@
 import { ref, reactive, inject, watch, onMounted, onActivated, onUnmounted } from 'vue'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { MagicStick, Picture as IconPicture, Refresh, Promotion, Lock, Share, Download, Clock, View, ArrowDown } from '@element-plus/icons-vue'
+import {
+  MagicStick,
+  Picture as IconPicture,
+  Refresh,
+  Promotion,
+  Lock,
+  Share,
+  Download,
+  Clock,
+  View,
+  ArrowDown,
+} from '@element-plus/icons-vue'
 import { addDrawing, getAllDrawings, deleteDrawing } from '../utils/indexedDB.js'
 
 const isLoggedIn = inject('isLoggedIn')
@@ -265,10 +275,12 @@ const showAuthDialog = inject('showAuthDialog')
 const lastCompletedDrawing = inject('lastCompletedDrawing')
 
 const params = reactive({
-  prompt: '1girl, solo, masterpiece, best quality,  looking at viewer,white background, standing, long hair, purple hair,blue eyes,maid apron,maid',
-  negative_prompt: 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry',
+  prompt:
+    '1girl, solo, year 2024,newest,masterpiece,highres,best quality,absurdres,very aesthetic,',
+  negative_prompt:
+    '(ai-generated:1.05),:q,realistic,no lineart,bad anatomy,bad perspective, bad hands,bad feet,user interface,twitter username, watermark,weibo watermark,speech bubble,weibo username,signature,worst quality, lowres, bad foot,artist name, artist logo, patreon username, patreon logo,facial mark,star sticker,sticker on face,shaded face',
   steps: 24,
-  cfg: 6.0,
+  cfg: 5.0,
   sampler_name: 'euler_ancestral',
   seed: String(Math.floor(Math.random() * 1000000000000000)),
   model_name: '',
@@ -321,38 +333,49 @@ const samplerOptions = [
   { value: 'lms', label: 'lms' },
 ]
 
-watch(lastCompletedDrawing, (newDrawing) => {
-  console.log('[Studio] Watch triggered with new value:', newDrawing ? Object.keys(newDrawing).join(', ') : null)
+watch(
+  lastCompletedDrawing,
+  (newDrawing) => {
+    console.log(
+      '[Studio] Watch triggered with new value:',
+      newDrawing ? Object.keys(newDrawing).join(', ') : null,
+    )
 
-  if (newDrawing && (newDrawing.imageUrl || newDrawing.stored_filename || newDrawing.storedFilename)) {
-    console.log('[Studio] Detected new completed drawing via watcher:', newDrawing)
+    if (
+      newDrawing &&
+      (newDrawing.imageUrl || newDrawing.stored_filename || newDrawing.storedFilename)
+    ) {
+      console.log('[Studio] Detected new completed drawing via watcher:', newDrawing)
 
-    imageUrl.value = newDrawing.imageUrl
-      || (newDrawing.stored_filename || newDrawing.storedFilename
-        ? `http://localhost:8080/api/v1/images/${newDrawing.stored_filename || newDrawing.storedFilename}`
-        : null)
+      imageUrl.value =
+        newDrawing.imageUrl ||
+        (newDrawing.stored_filename || newDrawing.storedFilename
+          ? `http://localhost:8080/api/v1/images/${newDrawing.stored_filename || newDrawing.storedFilename}`
+          : null)
 
-    currentImageBase64.value = newDrawing.image_base64 || null
-    currentDrawingParams.value = {
-      prompt: newDrawing.prompt,
-      negative_prompt: newDrawing.negative_prompt || newDrawing.negativePrompt,
-      steps: newDrawing.steps,
-      cfg: newDrawing.cfg,
-      sampler_name: newDrawing.sampler_name || newDrawing.samplerName,
-      seed: newDrawing.seed,
+      currentImageBase64.value = newDrawing.image_base64 || null
+      currentDrawingParams.value = {
+        prompt: newDrawing.prompt,
+        negative_prompt: newDrawing.negative_prompt || newDrawing.negativePrompt,
+        steps: newDrawing.steps,
+        cfg: newDrawing.cfg,
+        sampler_name: newDrawing.sampler_name || newDrawing.samplerName,
+        seed: newDrawing.seed,
+      }
+
+      if (drawingTimeoutId) {
+        clearTimeout(drawingTimeoutId)
+        drawingTimeoutId = null
+      }
+
+      addToHistory(newDrawing)
+      isLoading.value = false
+      progressStage.value = ''
+      ElMessage.success('图片生成成功！')
     }
-
-    if (drawingTimeoutId) {
-      clearTimeout(drawingTimeoutId)
-      drawingTimeoutId = null
-    }
-
-    addToHistory(newDrawing)
-    isLoading.value = false
-    progressStage.value = ''
-    ElMessage.success('图片生成成功！')
-  }
-}, { deep: true, immediate: true })
+  },
+  { deep: true, immediate: true },
+)
 
 watch(imageUrl, (newUrl) => {
   if (isMobileView.value && newUrl) {
@@ -362,119 +385,123 @@ watch(imageUrl, (newUrl) => {
 
 // --- 函数 ---
 const loadParametersFromStorage = () => {
-  let storedParams = sessionStorage.getItem('prefillStudioParams');
-  if (!storedParams) storedParams = localStorage.getItem('autoFillParams');
-  if (!storedParams) return;
+  let storedParams = sessionStorage.getItem('prefillStudioParams')
+  if (!storedParams) storedParams = localStorage.getItem('autoFillParams')
+  if (!storedParams) return
 
   try {
-    const parsedParams = JSON.parse(storedParams);
-    console.log('[Studio] 📝 Loading parameters from storage:', parsedParams);
-    
-    if (parsedParams.prompt) params.prompt = parsedParams.prompt;
-    if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt;
-    if (parsedParams.negative_prompt) params.negative_prompt = parsedParams.negative_prompt;
-    if (parsedParams.steps) params.steps = parsedParams.steps;
-    if (parsedParams.cfg) params.cfg = parsedParams.cfg;
-    if (parsedParams.samplerName) params.sampler_name = parsedParams.samplerName;
-    if (parsedParams.sampler_name) params.sampler_name = parsedParams.sampler_name;
-    if (parsedParams.seed) params.seed = parsedParams.seed;
-    if (parsedParams.model_name) params.model_name = parsedParams.model_name;
-    if (parsedParams.modelName) params.model_name = parsedParams.modelName;
-    
-    sessionStorage.removeItem('prefillStudioParams');
-    localStorage.removeItem('autoFillParams');
-    
-    ElMessage.success('参数已自动填充');
+    const parsedParams = JSON.parse(storedParams)
+    console.log('[Studio] 📝 Loading parameters from storage:', parsedParams)
+
+    if (parsedParams.prompt) params.prompt = parsedParams.prompt
+    if (parsedParams.negativePrompt) params.negative_prompt = parsedParams.negativePrompt
+    if (parsedParams.negative_prompt) params.negative_prompt = parsedParams.negative_prompt
+    if (parsedParams.steps) params.steps = parsedParams.steps
+    if (parsedParams.cfg) params.cfg = parsedParams.cfg
+    if (parsedParams.samplerName) params.sampler_name = parsedParams.samplerName
+    if (parsedParams.sampler_name) params.sampler_name = parsedParams.sampler_name
+    if (parsedParams.seed) params.seed = parsedParams.seed
+    if (parsedParams.model_name) params.model_name = parsedParams.model_name
+    if (parsedParams.modelName) params.model_name = parsedParams.modelName
+
+    sessionStorage.removeItem('prefillStudioParams')
+    localStorage.removeItem('autoFillParams')
+
+    ElMessage.success('参数已自动填充')
   } catch (error) {
-    console.error('[Studio] Failed to parse stored parameters:', error);
-    sessionStorage.removeItem('prefillStudioParams');
-    localStorage.removeItem('autoFillParams');
+    console.error('[Studio] Failed to parse stored parameters:', error)
+    sessionStorage.removeItem('prefillStudioParams')
+    localStorage.removeItem('autoFillParams')
   }
-};
+}
 
 // 监听参数加载事件
 const handleLoadAutoFillParams = () => {
-  loadParametersFromStorage();
-};
+  loadParametersFromStorage()
+}
 
 // 监听清空历史记录事件
 const handleClearHistoryEvent = () => {
-  historyImages.value = [];
-  console.log('🗑️ [Studio] 收到清空历史记录事件，已清空本地历史');
-};
+  historyImages.value = []
+  imageUrl.value = null
+  currentImageBase64.value = null
+  currentDrawingParams.value = null
+  isLoading.value = false
+  progressStage.value = ''
+  console.log('🗑️ [Studio] 收到清空历史记录事件，已清空本地历史和当前显示')
+}
 
 // 监听绘图失败事件
 const handleDrawingFailedEvent = (event) => {
-  console.error('❌ [Studio] 收到绘图失败事件:', event.detail);
-  
+  console.error('❌ [Studio] 收到绘图失败事件:', event.detail)
+
   // 清除超时定时器
   if (drawingTimeoutId) {
-    clearTimeout(drawingTimeoutId);
-    drawingTimeoutId = null;
+    clearTimeout(drawingTimeoutId)
+    drawingTimeoutId = null
   }
-  
+
   // 重置加载状态
-  isLoading.value = false;
-  progressStage.value = '';
-  
+  isLoading.value = false
+  progressStage.value = ''
+
   // 显示具体错误信息
-  ElMessage.error(event.detail.error || '生图失败，请稍后重试');
-  
-  console.log('🔄 [Studio] 已重置界面状态，用户可以重新尝试生图');
-};
+  ElMessage.error(event.detail.error || '生图失败，请稍后重试')
+
+  console.log('🔄 [Studio] 已重置界面状态，用户可以重新尝试生图')
+}
 
 // 处理生图超时
 const handleDrawingTimeout = () => {
-  console.warn('⏰ [Studio] 生图任务超时');
-  
+  console.warn('⏰ [Studio] 生图任务超时')
+
   // 重置状态
-  isLoading.value = false;
-  progressStage.value = '';
-  drawingTimeoutId = null;
-  
+  isLoading.value = false
+  progressStage.value = ''
+  drawingTimeoutId = null
+
   // 显示温和的超时提示
-  ElMessage.warning('图片生成时间较长，请稍后重试');
-  
-  console.log('🔄 [Studio] 超时后已重置界面状态');
-};
+  ElMessage.warning('图片生成时间较长，请稍后重试')
+
+  console.log('🔄 [Studio] 超时后已重置界面状态')
+}
 
 // 手动取消生图任务
 const cancelDrawing = () => {
-  console.log('🛑 [Studio] 用户手动取消生图任务');
-  
+  console.log('🛑 [Studio] 用户手动取消生图任务')
+
   // 清除超时定时器
   if (drawingTimeoutId) {
-    clearTimeout(drawingTimeoutId);
-    drawingTimeoutId = null;
+    clearTimeout(drawingTimeoutId)
+    drawingTimeoutId = null
   }
-  
+
   // 重置状态
-  isLoading.value = false;
-  progressStage.value = '';
-  
+  isLoading.value = false
+  progressStage.value = ''
+
   // 显示取消提示
   ElMessage({
     message: '已停止等待，但AI服务器可能仍在处理该任务',
     type: 'warning',
-    duration: 4000
-  });
-  
-  console.log('🔄 [Studio] 用户取消后已重置界面状态');
-};
+    duration: 4000,
+  })
+
+  console.log('🔄 [Studio] 用户取消后已重置界面状态')
+}
 
 async function fetchAvailableModels() {
   try {
-    const response = await api.get('/api/v1/ai-drawing/models');
-    availableModels.value = response.data.models || [];
+    const response = await api.get('/api/v1/ai-drawing/models')
+    availableModels.value = response.data.models || []
     if (availableModels.value.length > 0 && !params.model_name) {
-      params.model_name = availableModels.value[0].key;
+      params.model_name = availableModels.value[0].key
     }
-    console.log('📋 [Studio] 可用模型:', availableModels.value);
+    console.log('📋 [Studio] 可用模型:', availableModels.value)
   } catch (error) {
-    console.error('获取模型列表失败:', error);
+    console.error('获取模型列表失败:', error)
   }
 }
-
 
 onMounted(() => {
   handleResize()
@@ -500,10 +527,10 @@ onActivated(() => {
 // 清理事件监听器
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  window.removeEventListener('loadAutoFillParams', handleLoadAutoFillParams);
-  window.removeEventListener('clearHistory', handleClearHistoryEvent);
-  window.removeEventListener('drawingFailed', handleDrawingFailedEvent);
-});
+  window.removeEventListener('loadAutoFillParams', handleLoadAutoFillParams)
+  window.removeEventListener('clearHistory', handleClearHistoryEvent)
+  window.removeEventListener('drawingFailed', handleDrawingFailedEvent)
+})
 
 async function shareToGallery() {
   if (!currentImageBase64.value && !imageUrl.value) {
@@ -537,20 +564,23 @@ async function shareToGallery() {
 
     const formData = new FormData()
     formData.append('image', imageBlob, 'artwork.png')
-    formData.append('params', JSON.stringify(currentDrawingParams.value || {
-      prompt: params.prompt,
-      negative_prompt: params.negative_prompt,
-      steps: params.steps,
-      cfg: params.cfg,
-      sampler_name: params.sampler_name,
-      seed: params.seed,
-    }))
-
-    const response = await api.post(
-      '/api/v1/ai-drawing/share',
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+    formData.append(
+      'params',
+      JSON.stringify(
+        currentDrawingParams.value || {
+          prompt: params.prompt,
+          negative_prompt: params.negative_prompt,
+          steps: params.steps,
+          cfg: params.cfg,
+          sampler_name: params.sampler_name,
+          seed: params.seed,
+        },
+      ),
     )
+
+    const response = await api.post('/api/v1/ai-drawing/share', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
 
     if (response.status === 200) {
       ElMessage.success('作品已成功分享到画廊！')
@@ -606,8 +636,9 @@ async function loadHistoryFromIndexedDB() {
 }
 
 async function addToHistory(drawingData) {
-  const imageUrl = drawingData.imageUrl
-    || (drawingData.stored_filename || drawingData.storedFilename
+  const imageUrl =
+    drawingData.imageUrl ||
+    (drawingData.stored_filename || drawingData.storedFilename
       ? `http://localhost:8080/api/v1/images/${drawingData.stored_filename || drawingData.storedFilename}`
       : null)
 
@@ -705,7 +736,7 @@ const handleSubmit = async () => {
     return
   }
 
-  params.seed = String(Math.floor(Math.random() * 1000000000000000));
+  params.seed = String(Math.floor(Math.random() * 1000000000000000))
 
   isLoading.value = true
   progressStage.value = '正在提交任务...'
@@ -717,42 +748,41 @@ const handleSubmit = async () => {
     const response = await api.post('/api/v1/ai-drawing/generate', params)
 
     if (response.data.status === 'QUEUED') {
-        progressStage.value = '任务已进入队列，ComfyUI 正在生成...'
-        console.log('⏰ [Studio] 已设置5分钟超时保护')
+      progressStage.value = '任务已进入队列，ComfyUI 正在生成...'
+      console.log('⏰ [Studio] 已设置5分钟超时保护')
     } else {
-        throw new Error(response.data.message || '提交任务失败')
+      throw new Error(response.data.message || '提交任务失败')
     }
-
   } catch (error) {
     console.error('提交生成任务时发生错误:', error)
-    
+
     // 清除超时定时器
     if (drawingTimeoutId) {
-      clearTimeout(drawingTimeoutId);
-      drawingTimeoutId = null;
+      clearTimeout(drawingTimeoutId)
+      drawingTimeoutId = null
     }
-    
+
     // 检查是否是JWT过期或认证失败
     if (error.response?.status === 403 || error.response?.status === 401) {
-      console.warn('⚠️ [Studio] 认证失败，可能token已过期');
-      ElMessage.warning('登录已过期，请重新登录');
+      console.warn('⚠️ [Studio] 认证失败，可能token已过期')
+      ElMessage.warning('登录已过期，请重新登录')
       // 触发父组件的登出逻辑
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('userInfo');
-      window.location.reload(); // 刷新页面以重置状态
-      return;
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      localStorage.removeItem('userInfo')
+      window.location.reload() // 刷新页面以重置状态
+      return
     }
-    
+
     if (error.response?.data?.status === 'INSUFFICIENT_CREDITS') {
-      ElMessage.warning('积分不足！请前往个人中心签到获取积分');
+      ElMessage.warning('积分不足！请前往个人中心签到获取积分')
       isLoading.value = false
-      return;
+      return
     }
-    
+
     ElMessage.error(`提交失败: ${error.message || '未知错误'}`)
     isLoading.value = false
-  } 
+  }
 }
 </script>
 
@@ -788,7 +818,7 @@ const handleSubmit = async () => {
   max-height: 80vh;
   background-color: #fff;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -870,12 +900,12 @@ const handleSubmit = async () => {
   color: #666;
 }
 .login-prompt {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    color: #606266;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  color: #606266;
 }
 
 /* 历史图片区域样式 */
@@ -1104,4 +1134,3 @@ const handleSubmit = async () => {
   }
 }
 </style>
-
